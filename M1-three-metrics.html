@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Результативность, эффективность, производительность</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* ─── Экран: фиксированная высота, чтобы iframe не прыгал ─── */
+  .screen { min-height: 690px; }
+  .screen__body { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+
+  /* ─── Карточка ситуации ─── */
+  .case-card { min-height: 104px; display: flex; align-items: center; }
+
+  /* ─── Три варианта ответа ─── */
+  .opts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+  .opt {
+    padding: 13px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-height: 104px;
+  }
+
+  .opt__bar { display: block; width: 26px; height: 3px; border-radius: 2px; }
+  .opt__name { font-size: 13px; font-weight: 700; color: var(--dark); line-height: 1.25; }
+  .opt__q { font-size: 12px; color: var(--slate); line-height: 1.35; }
+
+  .opt--locked { cursor: default; pointer-events: none; }
+  .opt--locked:hover { transform: none; box-shadow: none; }
+
+  /* ─── Зона обратной связи под карточкой ситуации ─── */
+  .fb-zone { min-height: 180px; display: flex; flex-direction: column; justify-content: flex-start; }
+  .fb-zone p + p { margin-top: 9px; }
+  .fb-zone .hint {
+    font-size: 13px;
+    color: var(--slate);
+    text-align: center;
+    padding: 18px 10px;
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius-md);
+  }
+
+  /* ─── Итоговый экран ─── */
+  .sum-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--white);
+  }
+  .sum-row + .sum-row { margin-top: 9px; }
+  .sum-row__bar { flex-shrink: 0; width: 4px; align-self: stretch; border-radius: 2px; }
+  .sum-row__main { flex: 1; min-width: 0; }
+  .sum-row__name { font-size: 14px; font-weight: 700; color: var(--dark); line-height: 1.3; }
+  .sum-row__q { font-size: 12px; color: var(--slate); }
+  .sum-row__verdict { flex-shrink: 0; text-align: right; }
+  .sum-row__score {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 900;
+    color: var(--dark);
+    line-height: 1.2;
+  }
+  .sum-row__score em { font-style: normal; color: var(--red); }
+  .sum-row__word { font-size: 11px; color: var(--slate); line-height: 1.3; }
+
+  @media (max-width: 560px) {
+    .opts { grid-template-columns: 1fr; gap: 8px; }
+    .opt { min-height: 0; flex-direction: row; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .opt__bar { width: 3px; height: 26px; }
+    .opt__q { margin-left: auto; }
+    .case-card { min-height: 0; }
+    .fb-zone { min-height: 204px; }
+    .screen { min-height: 705px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script src="common.js"></script>
+<script>
+/* =========================================================
+   Три показателя: результативность · эффективность · производительность
+   Вводный интерактив к теме «Операционная эффективность»
+   Без подсчёта очков: итог — качественный, по каждому показателю
+   ========================================================= */
+
+var CONCEPTS = [
+  { name: 'Результативность',   q: 'Что сделано?',           color: 'var(--dark)'  },
+  { name: 'Эффективность',      q: 'Какой ценой?',           color: 'var(--red)'   },
+  { name: 'Производительность', q: 'Как быстро и сколько?',  color: 'var(--amber)' }
+];
+
+var CASES = [
+  {
+    text: 'Торговая сеть открыла 12 новых магазинов из 12, запланированных на этот год.',
+    a: 0,
+    why: 'Цель была поставлена и закрыта полностью — это ответ на вопрос <strong>«что сделано?»</strong>.',
+    note: 'Хочется сказать «12 за год — это же темп», но план был именно такой. Во сколько обошлось каждое открытие и как быстро шла стройка, здесь не сказано ни слова.'
+  },
+  {
+    text: 'После перенастройки скриптов оператор колл-центра закрывает 18 обращений в час вместо 14.',
+    a: 2,
+    why: 'Измерен объём работы за единицу времени — <strong>«как быстро и сколько»</strong>.',
+    note: 'Похоже на эффективность, но о затратах мы ничего не знаем. Если ради этих 18 обращений в смену добавили ещё двух супервайзеров, эффективность как раз упала.'
+  },
+  {
+    text: 'В бэк-офисе банка стоимость обработки одной заявки снизилась с 340 до 210 рублей.',
+    a: 1,
+    why: 'Вопрос <strong>«какой ценой?»</strong> в чистом виде: результат прежний, ресурса на него уходит меньше.',
+    note: 'Обратите внимание: про количество заявок и про сроки здесь не сказано ничего. Эффективность — это всегда отношение результата к затраченному, а не сам результат.'
+  },
+  {
+    text: 'Новую систему складского учёта запустили 1 октября, как и обещали бизнесу.',
+    a: 0,
+    why: 'Обещали к 1 октября — сделали к 1 октября. Вопрос <strong>«что сделано?»</strong> закрыт.',
+    note: 'Срок — это параметр цели, а не скорость потока. Уложиться в дедлайн можно и авралом с тройными переработками: тогда результативность высокая, а эффективность низкая.'
+  },
+  {
+    text: 'Транспортная компания перешла на новый алгоритм маршрутизации: доставок столько же, расход топлива ниже на 12%.',
+    a: 1,
+    why: 'Результат прямо зафиксирован — «доставок столько же». Меняется только цена этого результата.',
+    note: 'Это самая узнаваемая форма эффективности: <strong>тот же выход при меньшем входе</strong>. Вторая форма — больший выход при том же входе — распознаётся хуже, она ждёт вас впереди.'
+  },
+  {
+    text: 'Редакция корпоративного портала стала выпускать 40 материалов в месяц вместо 20.',
+    a: 2,
+    why: 'Считаем объём за период — это <strong>«как быстро и сколько»</strong>.',
+    note: 'И вот что здесь важно: 40 материалов ничего не говорят о том, читают ли их сотрудники и решена ли задача, ради которой портал существует. Производительность может расти при нулевой результативности.'
+  },
+  {
+    text: 'Цех сохранил прежний объём выпуска, перейдя на смену, в которой на 15% меньше людей.',
+    a: 1,
+    why: 'Объём выпуска не изменился, сократился ресурс. Это ответ на вопрос <strong>«какой ценой?»</strong>.',
+    note: 'Выработка на человека действительно выросла — поэтому так тянет сказать «производительность». Но производительность мы считаем, когда растёт выпуск; здесь он стоит на месте, а движется знаменатель.'
+  }
+];
+
+var state = { screen: 'intro', i: 0, answers: [] };
+
+/* ─── Вспомогательные ───────────────────────────────────── */
+
+function optsHtml(locked) {
+  var h = '<div class="opts">';
+  for (var k = 0; k < CONCEPTS.length; k++) {
+    h += '<div class="card ' + (locked ? 'opt opt--locked' : 'card--interactive opt')
+       + '" data-opt="' + k + '"' + (locked ? '' : ' onclick="pick(' + k + ')"') + '>'
+       +   '<span class="opt__bar" style="background:' + CONCEPTS[k].color + '"></span>'
+       +   '<div class="opt__name">' + CONCEPTS[k].name + '</div>'
+       +   '<div class="opt__q">' + CONCEPTS[k].q + '</div>'
+       + '</div>';
+  }
+  return h + '</div>';
+}
+
+function progressHtml() {
+  var done = state.i;
+  return '<div class="progress">'
+    + '<div class="progress__meta">'
+    +   '<span class="progress__label">Ситуация</span>'
+    +   '<span class="progress__fraction"><em>' + (state.i + 1) + '</em> / ' + CASES.length + '</span>'
+    + '</div>'
+    + '<div class="progress__track"><div class="progress__fill" style="width:' + (done / CASES.length * 100) + '%"></div></div>'
+    + '</div>';
+}
+
+function feedbackHtml(idx) {
+  var c = CASES[state.i];
+  if (idx === null || idx === undefined) {
+    return '<div class="hint">Выберите один из трёх показателей — и здесь появится разбор.</div>';
+  }
+  var right = (idx === c.a);
+  return '<div class="feedback ' + (right ? 'feedback--success' : 'feedback--error') + '">'
+    + '<div class="feedback__head">' + (right ? 'Верно · ' : 'Не совсем · ') + CONCEPTS[c.a].name + '</div>'
+    + '<p>' + c.why + '</p>'
+    + '<p>' + c.note + '</p>'
+    + '</div>';
+}
+
+/* ─── Экраны ────────────────────────────────────────────── */
+
+function renderIntro() {
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body">'
+    +   '<h1 class="page-title">Три взгляда<span>на одну и ту же работу</span></h1>'
+    +   '<div class="divider"></div>'
+    +   '<p class="lead-text">Результативность, эффективность и производительность — не синонимы. Это три разных вопроса к одной и той же работе.</p>'
+    +   '<div class="mt-md">' + optsHtml(true) + '</div>'
+    +   '<p class="lead-text mt-md">Впереди семь ситуаций из разных отраслей. Определите, о каком из трёх показателей идёт речь в каждой.</p>'
+    + '</div>'
+    + '<button class="btn btn--primary btn--full mt-md" onclick="start()">Начать →</button>'
+    + '</div>';
+}
+
+function renderQuestion() {
+  var ans = state.answers[state.i];
+  var answered = (ans !== null && ans !== undefined);
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body">'
+    +   progressHtml()
+    +   '<div class="card case-card mt-sm"><p class="question-text">' + CASES[state.i].text + '</p></div>'
+    +   '<div id="optbox" class="mt-sm">' + optsHtml(answered) + '</div>'
+    +   '<div id="fbbox" class="fb-zone mt-sm">' + feedbackHtml(ans) + '</div>'
+    + '</div>'
+    + '<div class="nav-bar">'
+    +   '<button id="next-btn" class="btn btn--primary btn--full" onclick="next()"' + (answered ? '' : ' disabled') + '>'
+    +     (state.i === CASES.length - 1 ? 'К итогам →' : 'Далее →')
+    +   '</button>'
+    + '</div>'
+    + '</div>';
+}
+
+function verdict(ok, total) {
+  if (ok === total) return 'различаете уверенно';
+  if (ok === 0) return 'стоит вернуться к определению';
+  if (ok / total >= 0.6) return 'почти уверенно';
+  return 'есть что уточнить';
+}
+
+function renderResult() {
+  var stats = [];
+  var k, c;
+  for (k = 0; k < CONCEPTS.length; k++) stats.push({ ok: 0, total: 0 });
+  for (k = 0; k < CASES.length; k++) {
+    c = CASES[k].a;
+    stats[c].total++;
+    if (state.answers[k] === c) stats[c].ok++;
+  }
+
+  var rows = '';
+  for (k = 0; k < CONCEPTS.length; k++) {
+    rows += '<div class="sum-row">'
+      + '<span class="sum-row__bar" style="background:' + CONCEPTS[k].color + '"></span>'
+      + '<div class="sum-row__main">'
+      +   '<div class="sum-row__name">' + CONCEPTS[k].name + '</div>'
+      +   '<div class="sum-row__q">' + CONCEPTS[k].q + '</div>'
+      + '</div>'
+      + '<div class="sum-row__verdict">'
+      +   '<div class="sum-row__score"><em>' + stats[k].ok + '</em> из ' + stats[k].total + '</div>'
+      +   '<div class="sum-row__word">' + verdict(stats[k].ok, stats[k].total) + '</div>'
+      + '</div>'
+      + '</div>';
+  }
+
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body">'
+    +   '<h2 class="section-title">Что получилось различать</h2>'
+    +   '<div class="divider"></div>'
+    +   '<p class="lead-text">Семь ситуаций разложились по трём показателям так:</p>'
+    +   '<div class="mt-sm">' + rows + '</div>'
+    +   '<div class="legend-box">'
+    +     '<span class="legend-tag">Главное</span>'
+    +     'Эти три показателя — не три ящика, по которым раскладывают работу, а <strong>три вопроса к одной и той же работе</strong>. Они могут расходиться в разные стороны: план выполнен, выработка выросла, а каждая единица результата обошлась дороже прежнего. Управление операционной эффективностью начинается ровно там, где вы перестаёте отвечать одним показателем за все три вопроса.'
+    +   '</div>'
+    + '</div>'
+    + '<button class="btn btn--secondary btn--full mt-sm" onclick="restart()">Пройти заново</button>'
+    + '</div>';
+}
+
+/* ─── Управление ────────────────────────────────────────── */
+
+function render() {
+  var h = '';
+  if (state.screen === 'intro') h = renderIntro();
+  else if (state.screen === 'q')  h = renderQuestion();
+  else h = renderResult();
+  document.getElementById('app').innerHTML = h;
+  notifyHeight();
+}
+
+function start() {
+  state.screen = 'q';
+  state.i = 0;
+  state.answers = [];
+  render();
+}
+
+/* Выбор обновляет блоки на месте: экран не перерисовывается и не вздрагивает */
+function pick(idx) {
+  if (state.answers[state.i] !== null && state.answers[state.i] !== undefined) return;
+  state.answers[state.i] = idx;
+
+  var right = CASES[state.i].a;
+  var cards = document.querySelectorAll('#optbox [data-opt]');
+  for (var k = 0; k < cards.length; k++) {
+    var n = Number(cards[k].getAttribute('data-opt'));
+    var cls = 'card opt opt--locked';
+    if (n === right) cls += ' card--correct';
+    else if (n === idx) cls += ' card--wrong';
+    else cls += ' card--dimmed';
+    cards[k].className = cls;
+    cards[k].onclick = null;
+  }
+
+  document.getElementById('fbbox').innerHTML = feedbackHtml(idx);
+  document.getElementById('next-btn').disabled = false;
+  notifyHeight();
+}
+
+function next() {
+  if (state.i === CASES.length - 1) state.screen = 'result';
+  else state.i++;
+  render();
+}
+
+function restart() {
+  state.screen = 'intro';
+  state.i = 0;
+  state.answers = [];
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
