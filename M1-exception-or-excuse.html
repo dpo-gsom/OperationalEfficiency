@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Исключение или отговорка</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* ─── Экран: фиксированная высота, чтобы iframe не прыгал ─── */
+  .screen { min-height: 656px; }
+  .screen__body { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+
+  /* ─── Карточка кейса ─── */
+  .case-card { min-height: 150px; }
+  .case-title { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--dark); line-height: 1.25; margin-bottom: 6px; }
+  .case-text { font-size: 14px; line-height: 1.6; color: var(--slate); }
+
+  /* ─── Поле 2×2 ─── */
+  .field {
+    display: grid;
+    grid-template-columns: 92px 1fr 1fr;
+    gap: 6px;
+  }
+  .field__col, .field__row {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--slate);
+    line-height: 1.3;
+  }
+  .field__col { text-align: center; padding: 0 4px 2px; align-self: end; }
+  .field__row { display: flex; align-items: center; justify-content: flex-end; text-align: right; padding-right: 4px; }
+
+  .cell {
+    min-height: 62px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--dark);
+    line-height: 1.3;
+  }
+  .cell--locked { cursor: default; pointer-events: none; }
+  .cell--good { border-color: var(--green); background: var(--green-bg); color: var(--green); }
+
+  /* ─── Зона разбора под полем ─── */
+  .fb-zone { min-height: 160px; }
+  .fb-zone .hint {
+    font-size: 13px;
+    color: var(--slate);
+    text-align: center;
+    padding: 18px 10px;
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius-md);
+  }
+  .axis-line { margin-top: 7px; }
+  .axis-line .badge { margin-right: 6px; vertical-align: 1px; }
+
+  /* ─── Итоговое поле с точками ─── */
+  .cell--final { min-height: 92px; justify-content: flex-start; gap: 8px; }
+  .dots { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; }
+  .dot {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+    background: var(--dark); color: var(--white);
+    border: 2px solid var(--dark);
+  }
+  .dot--miss { background: var(--white); color: var(--red); border-color: var(--red); }
+  .final-legend { font-size: 12px; color: var(--slate); line-height: 1.7; }
+  .final-legend b { color: var(--dark); }
+  .final-legend .dot { width: 18px; height: 18px; font-size: 9px; border-width: 1.5px; vertical-align: -3px; margin-right: 3px; }
+
+  @media (max-width: 560px) {
+    .screen { min-height: 840px; }
+    .field { grid-template-columns: 64px 1fr 1fr; gap: 5px; }
+    .field__col, .field__row { font-size: 9px; letter-spacing: 0.6px; }
+    .cell { padding: 8px 6px; font-size: 12px; }
+    .fb-zone { min-height: 272px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script src="common.js"></script>
+<script>
+/* =========================================================
+   Исключение или отговорка: когда можно не заниматься ОЭ
+   Модуль 1 · поле 2×2 = две половины итоговой формулы урока:
+   (1) есть цель важнее эффективности, (2) издержки под контролем
+   ========================================================= */
+
+var CELLS = {
+  numbers:   { name: 'Цифры есть, решения нет', goal: false, cost: true  },
+  choice:    { name: 'Осознанный выбор',        goal: true,  cost: true  },
+  noreason:  { name: 'Нет причины',             goal: false, cost: false },
+  nocontrol: { name: 'Нет контроля',            goal: true,  cost: false }
+};
+
+/* Порядок клеток на поле: верхний ряд — издержки видят */
+var LAYOUT = ['numbers', 'choice', 'noreason', 'nocontrol'];
+
+var CASES = [
+  {
+    title: 'Верфь',
+    text: 'Верфь строит деревянные парусные яхты на заказ: четыре лодки в год, по 14 месяцев каждая. Клиент сам выбирает дерево и может поменять планировку каюты посреди стройки. Сколько стоят такие переделки и окупает ли их цена, никто не считал: «У нас искусство, а не конвейер».',
+    cell: 'nocontrol',
+    goal: 'Штучная ручная работа и участие клиента — это и есть продукт. Ускорять мастеров и стандартизировать лодки действительно не нужно.',
+    cost: 'Цену переделок не знает никто. Можно годами строить яхты в убыток и узнать об этом, когда денег на исправление уже не останется.'
+  },
+  {
+    title: 'Доставка обедов',
+    text: 'Сервис доставки обедов в офисы работает восемь месяцев. Меню меняют каждую неделю, заказы собирают вручную в таблице, курьеров ищут через знакомых. Каждую пятницу основатель сверяет себестоимость обеда и долю списаний, а на март в календаре стоит пересмотр процессов.',
+    cell: 'choice',
+    goal: 'Продукт ещё ищут, и главное сейчас — скорость проверки гипотез. Ручная работа здесь оправдана.',
+    cost: 'Себестоимость и списания известны каждую неделю, дата пересмотра назначена. Ровно то, что советует урок.'
+  },
+  {
+    title: 'Онлайн-школа',
+    text: 'Онлайн-школа программирования нашла свою аудиторию три года назад, сейчас у неё 40 000 учеников и 300 кураторов. Расписание по-прежнему ведут в чатах, выплаты кураторам считают вручную, сколько стоит один выпускник, не знает никто. «Мы стартап, у нас так принято».',
+    cell: 'noreason',
+    goal: 'Продукт найден давно, идёт масштабирование — это прямой сигнал включать эффективность. «Стартап» стал не стадией, а привычкой.',
+    cost: 'Себестоимость выпускника не считали ни разу. Так выглядит инерция, о которой предупреждает урок.'
+  },
+  {
+    title: 'Кабельный оператор',
+    text: 'Кабельный оператор десять лет был единственным провайдером в городе. Полгода назад пришёл федеральный игрок. Финансовый отдел посчитал: подключение абонента обходится компании вдвое дороже, чем новичку. Правление решило: «У нас 90% рынка, подождём».',
+    cell: 'numbers',
+    goal: 'Причина не заниматься эффективностью исчезла в день прихода конкурента. По уроку именно тогда её включают — сразу.',
+    cost: 'Цифры посчитаны, и они тревожные. Это не слепота, а сознательное бездействие.'
+  },
+  {
+    title: 'Завод стройматериалов',
+    text: 'Спрос на стройматериалы упал на 30%. Собственник завода решил не сокращать бригады и год работать в минус, чтобы сохранить людей и долю рынка к восстановлению. Лимит убытка — 120 млн, его сверяют каждый месяц. Если к июню спрос не пойдёт вверх, включается план с сокращениями.',
+    cell: 'choice',
+    goal: 'Сохранить команду и долю рынка сейчас важнее прибыли. Это осознанная жертва эффективностью ради гибкости.',
+    cost: 'Лимит убытка, ежемесячная сверка и дата пересмотра — контроль не отпущен ни на день.'
+  }
+];
+
+var state = { screen: 'intro', i: 0, answers: [] };
+
+/* ─── Поле ──────────────────────────────────────────────── */
+
+function fieldHtml(cellFn) {
+  var h = '<div class="field">'
+    + '<div></div>'
+    + '<div class="field__col">Цели важнее<br>нет</div>'
+    + '<div class="field__col">Цель важнее<br>есть</div>';
+  for (var k = 0; k < LAYOUT.length; k++) {
+    if (k === 0) h += '<div class="field__row">Издержки видят</div>';
+    if (k === 2) h += '<div class="field__row">Издержки не видят</div>';
+    h += cellFn(LAYOUT[k]);
+  }
+  return h + '</div>';
+}
+
+function staticCell(key) {
+  return '<div class="card cell cell--locked' + (key === 'choice' ? ' cell--good' : '') + '">' + CELLS[key].name + '</div>';
+}
+
+function answerCell(key) {
+  var ans = state.answers[state.i];
+  if (ans === undefined || ans === null) {
+    return '<div class="card card--interactive cell" data-cell="' + key + '" onclick="pick(\'' + key + '\')">' + CELLS[key].name + '</div>';
+  }
+  return '<div class="' + lockedCellClass(key, ans) + '" data-cell="' + key + '">' + CELLS[key].name + '</div>';
+}
+
+function lockedCellClass(key, ans) {
+  var right = CASES[state.i].cell;
+  var cls = 'card cell cell--locked';
+  if (key === right) cls += ' card--correct';
+  else if (key === ans) cls += ' card--wrong';
+  else cls += ' card--dimmed';
+  return cls;
+}
+
+/* ─── Разбор ────────────────────────────────────────────── */
+
+function feedbackHtml(ans) {
+  if (ans === undefined || ans === null) {
+    return '<div class="hint">Выберите клетку поля — здесь появится разбор.</div>';
+  }
+  var c = CASES[state.i];
+  var cell = CELLS[c.cell];
+  var right = (ans === c.cell);
+  return '<div class="feedback ' + (right ? 'feedback--success' : 'feedback--error') + '">'
+    + '<div class="feedback__head">' + (right ? 'Верно · ' : 'Не совсем · правильно: ') + cell.name + '</div>'
+    + '<div class="axis-line"><span class="badge badge--neutral">Цель важнее · ' + (cell.goal ? 'есть' : 'нет') + '</span>' + c.goal + '</div>'
+    + '<div class="axis-line"><span class="badge badge--neutral">Издержки · ' + (cell.cost ? 'видят' : 'не видят') + '</span>' + c.cost + '</div>'
+    + '</div>';
+}
+
+function progressHtml() {
+  return '<div class="progress">'
+    + '<div class="progress__meta">'
+    +   '<span class="progress__label">Кейс</span>'
+    +   '<span class="progress__fraction"><em>' + (state.i + 1) + '</em> / ' + CASES.length + '</span>'
+    + '</div>'
+    + '<div class="progress__track"><div class="progress__fill" style="width:' + (state.i / CASES.length * 100) + '%"></div></div>'
+    + '</div>';
+}
+
+/* ─── Экраны ────────────────────────────────────────────── */
+
+function renderIntro() {
+  return '<div class="screen__body">'
+    +   '<h1 class="page-title">Исключение<span>или отговорка?</span></h1>'
+    +   '<div class="divider"></div>'
+    +   '<p class="lead-text">Бывают ситуации, когда эффективность законно уступает место другим целям. Но «у нас особый случай» — ещё и самая удобная отговорка, чтобы ничего не менять.</p>'
+    +   '<p class="lead-text mt-sm">Разберите пять компаний. Для каждой решите две вещи: есть ли у неё цель важнее эффективности и видит ли она свои издержки. Ответ — клетка на этом поле.</p>'
+    +   '<div class="mt-md">' + fieldHtml(function(key) { return '<div class="card cell cell--locked">' + CELLS[key].name + '</div>'; }) + '</div>'
+    + '</div>'
+    + '<button class="btn btn--primary btn--full mt-md" onclick="start()">Начать →</button>';
+}
+
+function renderQuestion() {
+  var c = CASES[state.i];
+  var ans = state.answers[state.i];
+  var answered = (ans !== undefined && ans !== null);
+  return '<div class="screen__body">'
+    +   progressHtml()
+    +   '<div class="card case-card mt-xs">'
+    +     '<div class="case-title">' + c.title + '</div>'
+    +     '<p class="case-text">' + c.text + '</p>'
+    +   '</div>'
+    +   '<div id="fieldbox" class="mt-sm">' + fieldHtml(answerCell) + '</div>'
+    +   '<div id="fbbox" class="fb-zone mt-sm">' + feedbackHtml(ans) + '</div>'
+    + '</div>'
+    + '<div class="nav-bar">'
+    +   '<button id="next-btn" class="btn btn--primary btn--full" onclick="next()"' + (answered ? '' : ' disabled') + '>'
+    +     (state.i === CASES.length - 1 ? 'К итогам →' : 'Далее →')
+    +   '</button>'
+    + '</div>';
+}
+
+function finalCell(key) {
+  var dots = '';
+  for (var n = 0; n < CASES.length; n++) {
+    if (CASES[n].cell !== key) continue;
+    var hit = (state.answers[n] === key);
+    dots += '<span class="dot' + (hit ? '' : ' dot--miss') + '">' + (n + 1) + '</span>';
+  }
+  return '<div class="card cell cell--locked cell--final' + (key === 'choice' ? ' cell--good' : '') + '">'
+    + '<div>' + CELLS[key].name + '</div>'
+    + '<div class="dots">' + dots + '</div>'
+    + '</div>';
+}
+
+function renderFinal() {
+  var names = [];
+  for (var n = 0; n < CASES.length; n++) names.push('<b>' + (n + 1) + '</b> ' + CASES[n].title.toLowerCase());
+  return '<div class="screen__body">'
+    +   '<h2 class="section-title">Где оказались пять компаний</h2>'
+    +   '<div class="divider"></div>'
+    +   fieldHtml(finalCell)
+    +   '<p class="final-legend mt-sm">' + names.join(' · ') + '<br>'
+    +     '<span class="dot">1</span>вы определили верно &nbsp; <span class="dot dot--miss">1</span>вы выбрали другую клетку</p>'
+    +   '<div class="legend-box">'
+    +     '<span class="legend-tag">Итог</span>'
+    +     'Не думать об эффективности разумно только в одной клетке: <strong>вы сознательно выбрали другую цель и при этом держите минимальный финансовый контроль</strong>. В остальных трёх не хватает либо причины откладывать, либо контроля — и рано или поздно это заканчивается кризисом, на который уже не остаётся ресурсов.'
+    +   '</div>'
+    + '</div>'
+    + '<button class="btn btn--secondary btn--full" onclick="restart()">Пройти заново</button>';
+}
+
+/* ─── Управление ────────────────────────────────────────── */
+
+function render() {
+  var body;
+  if (state.screen === 'intro') body = renderIntro();
+  else if (state.screen === 'q') body = renderQuestion();
+  else body = renderFinal();
+  document.getElementById('app').innerHTML = '<div class="page-wrap--compact screen anim-fade-up">' + body + '</div>';
+  notifyHeight();
+}
+
+function start() {
+  state.screen = 'q';
+  state.i = 0;
+  state.answers = [];
+  render();
+}
+
+/* Выбор обновляет поле и разбор на месте: экран не вздрагивает */
+function pick(key) {
+  if (state.answers[state.i] !== undefined && state.answers[state.i] !== null) return;
+  state.answers[state.i] = key;
+  var cells = document.querySelectorAll('#fieldbox [data-cell]');
+  for (var k = 0; k < cells.length; k++) {
+    cells[k].className = lockedCellClass(cells[k].getAttribute('data-cell'), key);
+    cells[k].onclick = null;
+  }
+  document.getElementById('fbbox').innerHTML = feedbackHtml(key);
+  document.getElementById('next-btn').disabled = false;
+  notifyHeight();
+}
+
+function next() {
+  if (state.i === CASES.length - 1) state.screen = 'final';
+  else state.i++;
+  render();
+}
+
+function restart() {
+  state.screen = 'intro';
+  state.i = 0;
+  state.answers = [];
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
