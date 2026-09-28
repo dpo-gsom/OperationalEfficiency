@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Разбор квартальной сводки</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* ─── Экран: фиксированная высота, чтобы iframe не прыгал ─── */
+  .screen { min-height: 866px; }
+  .screen__body { flex: 1; display: flex; flex-direction: column; }
+  .screen__body--center { justify-content: center; }
+
+  /* ─── Шапка сводки ─── */
+  .sheet-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    border-bottom: 2px solid var(--dark);
+    padding-bottom: 8px;
+  }
+  .sheet-title { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: var(--dark); line-height: 1.25; }
+  .sheet-sub { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--slate); }
+  .sheet-hint { font-size: 12.5px; color: var(--slate); line-height: 1.5; margin: 10px 0; min-height: 19px; }
+
+  /* ─── Строки сводки ─── */
+  .lines { display: flex; flex-direction: column; gap: 5px; }
+
+  .line {
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    border-left-width: 4px;
+    border-radius: var(--radius-md);
+    padding: 7px 12px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .line__main { display: flex; align-items: center; gap: 14px; }
+  .line__text { flex: 1; min-width: 0; font-size: 13.5px; line-height: 1.42; color: var(--dark); }
+  .line__text b { font-weight: 700; }
+  .line__marks { flex-shrink: 0; width: 118px; display: flex; flex-direction: column; gap: 3px; }
+
+  .pill {
+    font-family: var(--font-body);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    line-height: 1.1;
+    padding: 4px 6px;
+    border-radius: 20px;
+    border: 1.5px solid var(--border);
+    background: var(--white);
+    color: var(--slate);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pill:hover { border-color: var(--dark); color: var(--dark); }
+  .pill--r.is-on { background: var(--red);  border-color: var(--red);  color: var(--white); }
+  .pill--p.is-on { background: var(--dark); border-color: var(--dark); color: var(--white); }
+
+  /* После проверки */
+  .line.is-checked { cursor: pointer; }
+  .line.is-checked:hover { background: var(--cream); }
+  .line.is-checked .pill { pointer-events: none; }
+  .line--ok     { border-left-color: var(--green); }
+  .line--wrong  { border-left-color: var(--red); }
+  .line--missed { border-left-color: var(--amber); }
+  .line--quiet .line__text { color: var(--slate); }
+  .line.is-open { border-top-color: var(--dark); border-right-color: var(--dark); border-bottom-color: var(--dark); }
+
+  .pill.is-right          { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+  .pill.is-right.is-on    { background: var(--green);    border-color: var(--green); color: var(--white); }
+  .pill.is-wrong          { background: var(--red);      border-color: var(--red);   color: var(--white); }
+  .pill.is-off            { opacity: 0.35; }
+
+  .line__why {
+    margin-top: 7px;
+    padding-top: 7px;
+    border-top: 1px dashed var(--border);
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--slate);
+    animation: fadeUp 0.25s ease both;
+  }
+  .line__verdict { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+  .v--ok     { color: var(--green); }
+  .v--wrong  { color: var(--red); }
+  .v--missed { color: var(--amber); }
+  .v--quiet  { color: var(--slate); }
+
+  /* ─── Вводный экран: образец отметок ─── */
+  .legend-row { display: flex; align-items: center; gap: 12px; }
+  .legend-row + .legend-row { margin-top: 10px; }
+  .legend-row .pill { width: 118px; flex-shrink: 0; pointer-events: none; }
+  .legend-row__text { font-size: 13.5px; color: var(--slate); line-height: 1.5; }
+
+  /* ─── Итоговый экран ─── */
+  .stat-strip { display: flex; flex-wrap: wrap; gap: 6px; }
+  .step { display: flex; gap: 14px; padding: 12px 0; border-top: 1px solid var(--border); }
+  .step:last-child { border-bottom: 1px solid var(--border); }
+  .step__when {
+    width: 88px;
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--red);
+    padding-top: 3px;
+  }
+  .step__text { font-size: 14px; line-height: 1.6; color: var(--slate); }
+  .step__text b { color: var(--dark); }
+
+  @media (max-width: 560px) {
+    .screen { min-height: 1122px; }
+    .line__main { flex-direction: column; align-items: stretch; gap: 8px; }
+    .line__marks { width: auto; flex-direction: row; gap: 6px; }
+    .line__marks .pill { flex: 1; }
+    .legend-row { flex-direction: column; align-items: flex-start; gap: 4px; }
+    .step { flex-direction: column; gap: 2px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script src="common.js"></script>
+<script>
+/* =========================================================
+   Разбор квартальной сводки: реактивные сигналы и проактивные окна
+   Модуль 1 · «Когда компании стоит заняться повышением ОЭ»
+   Шум оставляют без отметки — это и есть третья категория
+   ========================================================= */
+
+var KIND = {
+  r: 'реактивный сигнал',
+  p: 'проактивное окно',
+  n: 'не сигнал'
+};
+
+var LINES = [
+  {
+    dept: 'Финансы',
+    text: 'Выручка выросла на 17% к прошлому году, чистая прибыль — на 1%.',
+    kind: 'r', topic: 'падение маржинальности',
+    why: 'Рост есть, а до прибыли он не доходит — затраты съедают его по дороге. Самый коварный сигнал: в отчёте для акционеров он выглядит как успех.'
+  },
+  {
+    dept: 'Производство',
+    text: 'Совет директоров утвердил запуск второго цеха в Тверской области, старт — в мае.',
+    kind: 'p', topic: 'масштабирование',
+    why: 'До мая процессы можно прописать один раз и перенести в новый цех готовыми. После мая их придётся переделывать в двух местах сразу, да ещё на ходу.'
+  },
+  {
+    dept: 'Персонал',
+    text: 'Уволились 2 мастера смены из 5 и 11 операторов линий. Отдел персонала просит пересмотреть зарплаты.',
+    kind: 'r', topic: 'текучесть на линейных позициях',
+    why: 'Выглядит как вопрос к HR и деньгам. Но на линии люди чаще уходят от авралов и бессмысленной работы: прибавка купит пару месяцев, причину она не уберёт.'
+  },
+  {
+    dept: 'Снабжение',
+    text: 'С 1 октября поставщик гранулята поднимает цены на 9% — так же поступили все крупные поставщики.',
+    kind: 'n', topic: 'внешний фактор',
+    why: 'Удар по затратам, но причина вне ваших процессов — конкуренты получили то же подорожание. И заметьте: оно начинается после квартала, так что слабую прибыль III квартала им не объяснить.'
+  },
+  {
+    dept: 'Продажи',
+    text: 'Продажи линейки для летних кафе упали на 40% — сезон закончился, как и каждый год.',
+    kind: 'n', topic: 'сезонность',
+    why: 'Ожидаемое колебание спроса, которое повторяется из года в год. О ваших процессах оно ничего не говорит.'
+  },
+  {
+    dept: 'ИТ',
+    text: 'Утверждён бюджет на внедрение ERP-системы, проект стартует в январе.',
+    kind: 'p', topic: 'перед внедрением ERP',
+    why: 'Автоматизация неупорядоченного процесса лишь ускоряет производство ошибок. Окно открыто сейчас, до настройки системы: сначала упростить и убрать потери, потом автоматизировать.'
+  },
+  {
+    dept: 'Коммерция',
+    text: 'Конкурент продаёт такую же упаковку по нашей цене, но доставляет на следующий день, а мы — за три. Коммерческий директор предлагает скидку 5%.',
+    kind: 'r', topic: 'конкурент сильнее при той же цене',
+    why: 'Выглядит как вопрос цены. Но если при той же цене конкурент даёт лучший сервис, его процессы дешевле ваших. Скидка просто переложит потерю из логистики в маржу.'
+  },
+  {
+    dept: 'Склад',
+    text: 'Ежегодная инвентаризация: расхождения 0,3% — в пределах нормы.',
+    kind: 'n', topic: 'показатель в норме',
+    why: 'Не всякая цифра в сводке — сигнал. Этот показатель в порядке и действий не требует.'
+  },
+  {
+    dept: 'Руководство',
+    text: 'Два начальника цехов уходят на пенсию в первом полугодии, на их места готовят молодых технологов.',
+    kind: 'p', topic: 'смена поколений руководителей',
+    why: 'Новых руководителей проще сразу учить чистому стандарту, чем через пару лет переучивать с «как всегда делали». Окно открыто, пока преемники не переняли старые привычки.'
+  }
+];
+
+var state = { screen: 'intro', marks: {}, checked: false, open: null };
+
+/* ─── Вспомогательные ───────────────────────────────────── */
+
+function markOf(i) {
+  var m = state.marks[i];
+  return (m === 'r' || m === 'p') ? m : null;
+}
+
+function statusOf(i) {
+  var kind = LINES[i].kind;
+  var m = markOf(i);
+  if (kind === 'n') return m ? 'wrong' : 'quiet';
+  if (m === kind) return 'ok';
+  return m ? 'wrong' : 'missed';
+}
+
+function verdictText(i) {
+  var kind = LINES[i].kind;
+  var m = markOf(i);
+  var st = statusOf(i);
+  if (st === 'ok')     return 'Верно: ' + KIND[kind] + ' · ' + LINES[i].topic;
+  if (st === 'quiet')  return 'Верно: это не сигнал · ' + LINES[i].topic;
+  if (st === 'missed') return 'Пропущено: это ' + KIND[kind] + ' · ' + LINES[i].topic;
+  if (kind === 'n')    return 'Лишняя отметка: это не сигнал · ' + LINES[i].topic;
+  return 'Вы отметили ' + KIND[m] + ', а это ' + KIND[kind] + ' · ' + LINES[i].topic;
+}
+
+function pillHtml(i, k, label) {
+  var m = markOf(i);
+  var cls = 'pill pill--' + k;
+  if (m === k) cls += ' is-on';
+  if (state.checked) {
+    if (LINES[i].kind === k) cls += ' is-right';
+    else if (m === k) cls += ' is-wrong';
+    else cls += ' is-off';
+  }
+  var click = state.checked ? '' : ' onclick="mark(' + i + ',\'' + k + '\')"';
+  return '<button class="' + cls + '"' + click + '>' + label + '</button>';
+}
+
+function lineHtml(i) {
+  var L = LINES[i];
+  var cls = 'line';
+  var click = '';
+  if (state.checked) {
+    cls += ' is-checked line--' + statusOf(i);
+    if (state.open === i) cls += ' is-open';
+    click = ' onclick="toggleOpen(' + i + ')"';
+  }
+  var h = '<div class="' + cls + '"' + click + '>'
+    + '<div class="line__main">'
+    +   '<div class="line__text"><b>' + L.dept + '.</b> ' + L.text + '</div>'
+    +   '<div class="line__marks">' + pillHtml(i, 'r', 'Реактивный') + pillHtml(i, 'p', 'Проактивный') + '</div>'
+    + '</div>';
+  if (state.checked && state.open === i) {
+    h += '<div class="line__why">'
+      +   '<div class="line__verdict v--' + statusOf(i) + '">' + verdictText(i) + '</div>'
+      +   L.why
+      + '</div>';
+  }
+  return h + '</div>';
+}
+
+function countMarks() {
+  var n = 0;
+  for (var i = 0; i < LINES.length; i++) if (markOf(i)) n++;
+  return n;
+}
+
+function stats() {
+  var s = { r: 0, rTotal: 0, p: 0, pTotal: 0, extra: 0 };
+  for (var i = 0; i < LINES.length; i++) {
+    var kind = LINES[i].kind;
+    var m = markOf(i);
+    if (kind === 'r') { s.rTotal++; if (m === 'r') s.r++; }
+    if (kind === 'p') { s.pTotal++; if (m === 'p') s.p++; }
+    if (kind === 'n' && m) s.extra++;
+  }
+  return s;
+}
+
+/* ─── Экраны ────────────────────────────────────────────── */
+
+function renderIntro() {
+  return '<div class="screen__body screen__body--center">'
+    +   '<h1 class="page-title">Что в этой сводке<span>требует действий?</span></h1>'
+    +   '<div class="divider"></div>'
+    +   '<p class="lead-text">Перед вами сводка для генерального директора производителя пищевой упаковки по итогам III квартала: девять строк от разных служб.</p>'
+    +   '<div class="card mt-md">'
+    +     '<div class="legend-row"><span class="pill pill--r is-on">Реактивный</span>'
+    +       '<span class="legend-row__text">сигнал, что проблема уже есть и исправлять нужно сейчас</span></div>'
+    +     '<div class="legend-row"><span class="pill pill--p is-on">Проактивный</span>'
+    +       '<span class="legend-row__text">удачный момент, чтобы навести порядок заранее, пока не болит</span></div>'
+    +   '</div>'
+    +   '<p class="lead-text mt-md">Отметьте такие строки. Те, что не относятся ни к тому, ни к другому, оставьте без отметки: в любой сводке большая часть цифр действий не требует.</p>'
+    + '</div>'
+    + '<button class="btn btn--primary btn--full mt-md" onclick="go(\'sheet\')">Открыть сводку →</button>';
+}
+
+function renderSheet() {
+  var hint;
+  if (!state.checked) {
+    hint = 'Отмечено строк: ' + countMarks() + ' из ' + LINES.length + '. Повторное нажатие снимает отметку.';
+  } else {
+    hint = 'Нажмите на любую строку, чтобы открыть разбор.';
+  }
+  var rows = '';
+  for (var i = 0; i < LINES.length; i++) rows += lineHtml(i);
+
+  var btn = state.checked
+    ? '<button class="btn btn--primary btn--full" onclick="go(\'final\')">Что делать этой компании →</button>'
+    : '<button class="btn btn--primary btn--full" onclick="check()"' + (countMarks() ? '' : ' disabled') + '>Проверить</button>';
+
+  return '<div class="screen__body">'
+    +   '<div class="sheet-head">'
+    +     '<div class="sheet-title">Сводка для генерального директора</div>'
+    +     '<div class="sheet-sub">III квартал</div>'
+    +   '</div>'
+    +   '<div class="sheet-hint">' + hint + '</div>'
+    +   '<div class="lines">' + rows + '</div>'
+    + '</div>'
+    + '<div class="nav-bar">' + btn + '</div>';
+}
+
+function renderFinal() {
+  var s = stats();
+  return '<div class="screen__body screen__body--center">'
+    +   '<h2 class="section-title">Что делать этой компании</h2>'
+    +   '<div class="divider"></div>'
+    +   '<p class="lead-text">В сводке три реактивных сигнала — по правилу из урока этого достаточно, чтобы не откладывать. И три проактивных окна, которые закроются в ближайшие полгода.</p>'
+    +   '<div class="stat-strip mt-sm">'
+    +     '<span class="badge badge--neutral">Сигналов найдено: ' + s.r + ' из ' + s.rTotal + '</span>'
+    +     '<span class="badge badge--neutral">Окон найдено: ' + s.p + ' из ' + s.pTotal + '</span>'
+    +     '<span class="badge badge--neutral">Лишних отметок: ' + s.extra + '</span>'
+    +   '</div>'
+    +   '<div class="mt-md">'
+    +     '<div class="step"><div class="step__when">Сейчас</div>'
+    +       '<div class="step__text"><b>Хронометраж одного рабочего дня на линиях</b> — там, где уходят люди и растягивается доставка. Первые потери обычно видны уже в первый день замеров.</div></div>'
+    +     '<div class="step"><div class="step__when">До января</div>'
+    +       '<div class="step__text"><b>Упростить процессы, которые пойдут в ERP.</b> Иначе система закрепит сегодняшние потери и начнёт производить их быстрее.</div></div>'
+    +     '<div class="step"><div class="step__when">До мая</div>'
+    +       '<div class="step__text"><b>Прописать стандарты для второго цеха и учить им новых начальников цехов.</b> Два окна закрываются одним действием.</div></div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="nav-bar">'
+    +   '<button class="btn btn--secondary" onclick="go(\'sheet\')">← К сводке</button>'
+    +   '<button class="btn btn--primary" onclick="restart()">Пройти заново</button>'
+    + '</div>';
+}
+
+/* ─── Управление ────────────────────────────────────────── */
+
+/* anim = true только при смене экрана: отметки и разборы
+   перерисовывают экран без анимации, поэтому он не вздрагивает */
+function render(anim) {
+  var body = '';
+  if (state.screen === 'intro') body = renderIntro();
+  else if (state.screen === 'sheet') body = renderSheet();
+  else body = renderFinal();
+  document.getElementById('app').innerHTML =
+    '<div class="page-wrap--compact screen' + (anim ? ' anim-fade-up' : '') + '">' + body + '</div>';
+  notifyHeight();
+}
+
+function go(screen) {
+  state.screen = screen;
+  render(true);
+}
+
+function mark(i, k) {
+  if (state.checked) return;
+  state.marks[i] = (markOf(i) === k) ? null : k;
+  render(false);
+}
+
+/* После проверки сразу раскрываем первую строку с ошибкой или пропуском */
+function check() {
+  state.checked = true;
+  state.open = null;
+  for (var i = 0; i < LINES.length; i++) {
+    var st = statusOf(i);
+    if (st === 'wrong' || st === 'missed') { state.open = i; break; }
+  }
+  render(false);
+}
+
+function toggleOpen(i) {
+  state.open = (state.open === i) ? null : i;
+  render(false);
+}
+
+function restart() {
+  state.marks = {};
+  state.checked = false;
+  state.open = null;
+  go('intro');
+}
+
+render(true);
+</script>
+</body>
+</html>
