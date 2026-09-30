@@ -178,7 +178,7 @@ function feedbackHtml(idx) {
   }
   var right = (idx === c.a);
   return '<div class="feedback ' + (right ? 'feedback--success' : 'feedback--error') + '">'
-    + '<div class="feedback__head">' + (right ? 'Верно · ' : 'Не совсем · ') + CONCEPTS[c.a].name + '</div>'
+    + '<div class="feedback__head">' + (right ? 'Верно · ' : 'Неверно. Правильный ответ: ') + CONCEPTS[c.a].name + '</div>'
     + '<p>' + c.why + '</p>'
     + '<p>' + c.note + '</p>'
     + '</div>';
