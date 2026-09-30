@@ -188,7 +188,7 @@ function lockedCellClass(key, ans) {
 
 function feedbackHtml(ans) {
   if (ans === undefined || ans === null) {
-    return '<div class="hint">Выберите клетку поля — здесь появится разбор.</div>';
+    return '<div class="hint">Выберите ответ — здесь появится разбор.</div>';
   }
   var c = CASES[state.i];
   var cell = CELLS[c.cell];
@@ -217,7 +217,7 @@ function renderIntro() {
     +   '<h1 class="page-title">Исключение<span>или отговорка?</span></h1>'
     +   '<div class="divider"></div>'
     +   '<p class="lead-text">Бывают ситуации, когда эффективность законно уступает место другим целям. Но «у нас особый случай» — ещё и самая удобная отговорка, чтобы ничего не менять.</p>'
-    +   '<p class="lead-text mt-sm">Разберите пять компаний. Для каждой решите две вещи: есть ли у неё цель важнее эффективности и видит ли она свои издержки. Ответ — клетка на этом поле.</p>'
+    +   '<p class="lead-text mt-sm">Разберите пять компаний. Для каждой решите две вещи: есть ли у неё цель важнее эффективности и видит ли она свои издержки. Выберите ответ.</p>'
     +   '<div class="mt-md">' + fieldHtml(function(key) { return '<div class="card cell cell--locked">' + CELLS[key].name + '</div>'; }) + '</div>'
     + '</div>'
     + '<button class="btn btn--primary btn--full mt-md" onclick="start()">Начать →</button>';
