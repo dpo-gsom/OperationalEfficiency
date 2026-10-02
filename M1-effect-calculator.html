@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Считаем эффект от внедрения идеи</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* ─── Экран: фиксированная высота, чтобы iframe не прыгал ─── */
+  .screen { min-height: 790px; }
+  .screen__body { flex: 1; display: flex; flex-direction: column; }
+  .screen__body--center { justify-content: center; }
+
+  /* ─── Строка формул ─── */
+  .fbar {
+    display: flex;
+    align-items: stretch;
+    height: 40px;
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+  .fbar:focus-within { border-color: var(--dark); }
+  .fbar__name {
+    width: 52px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: var(--dark);
+    background: var(--sand);
+    border-right: 1px solid var(--border);
+  }
+  .fbar__fx {
+    width: 30px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-style: italic; color: var(--slate);
+  }
+  .fbar__input {
+    flex: 1; min-width: 0;
+    border: 0; outline: 0;
+    padding: 0 10px 0 2px;
+    font-family: var(--font-body);
+    font-size: 15px;
+    color: var(--dark);
+    background: transparent;
+  }
+  .fbar__input[readonly] { color: var(--slate); }
+
+  /* ─── Кнопки операторов ─── */
+  .ops { display: flex; gap: 5px; margin-top: 8px; }
+  .op {
+    min-width: 38px; height: 32px;
+    padding: 0 8px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--white);
+    font-family: var(--font-body);
+    font-size: 15px; font-weight: 600;
+    color: var(--dark);
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .op:hover { border-color: var(--dark); background: var(--sand); }
+  .op--enter {
+    margin-left: auto;
+    padding: 0 14px;
+    background: var(--dark); border-color: var(--dark); color: var(--white);
+    font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+  }
+  .op--enter:hover { background: var(--red); border-color: var(--red); }
+
+  /* ─── Подсказка к выбранной ячейке ─── */
+  .hintbox {
+    min-height: 106px;
+    margin-top: 6px;
+    padding: 9px 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--slate);
+    background: var(--sand);
+    border-left: 3px solid var(--dark);
+    border-radius: var(--radius-sm);
+  }
+  .hintbox b { color: var(--dark); }
+  .hintbox--err { background: var(--red-bg); border-left-color: var(--red); color: #7A1525; }
+  .hintbox--err b { color: #7A1525; }
+  .hint-ok { color: var(--green); font-weight: 700; }
+  .hint-formula { font-weight: 700; color: var(--dark); white-space: nowrap; }
+  .reveal-btn {
+    margin-top: 6px;
+    display: inline-block;
+    padding: 4px 10px;
+    border: 1.5px solid currentColor;
+    border-radius: 20px;
+    background: transparent;
+    font-family: var(--font-body);
+    font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  /* ─── Таблица ─── */
+  .sheet {
+    margin-top: 4px;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    font-size: 13px;
+  }
+  .sh-row { display: grid; grid-template-columns: 30px 1fr 150px; border-top: 1px solid #ECE7DE; }
+  .sh-row:first-child { border-top: 0; }
+  .sh-row > div { padding: 5px 9px; line-height: 1.3; }
+  .sh-head > div {
+    padding: 3px 9px;
+    background: var(--sand);
+    font-size: 10.5px; font-weight: 700; color: var(--slate);
+    text-align: center;
+  }
+  .sh-num {
+    background: var(--sand);
+    color: var(--slate);
+    font-size: 11px;
+    text-align: center;
+    padding-left: 0 !important; padding-right: 0 !important;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sh-label { color: var(--dark); display: flex; align-items: center; }
+  .sh-val {
+    position: relative;
+    border-left: 1px solid #ECE7DE;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    display: flex; align-items: center; justify-content: flex-end;
+  }
+  .sh-click { cursor: pointer; }
+  .sh-click:hover .sh-val { background: var(--cream); }
+  .sh-val--input { color: var(--slate); }
+  .cell-input {
+    position: absolute; top: 0; right: 0; bottom: 0;
+    width: 100%;
+    z-index: 2;
+    border: 0; outline: 0;
+    padding: 0 9px;
+    background: var(--white);
+    box-shadow: inset 0 0 0 2px var(--dark), 0 2px 8px rgba(0, 59, 72, 0.12);
+    font-family: var(--font-body);
+    font-size: inherit;
+    color: var(--dark);
+    text-align: left;
+  }
+  .sh-section > div { background: var(--white); }
+  .sh-section .sh-label {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--red);
+    padding-top: 9px;
+  }
+
+  .st-ok  .sh-val, .sh-click.st-ok:hover  .sh-val { background: var(--green-bg); color: var(--green); font-weight: 600; }
+  .st-rev .sh-val, .sh-click.st-rev:hover .sh-val { background: var(--amber-bg); color: var(--amber); font-weight: 600; }
+  .st-bad .sh-val, .sh-click.st-bad:hover .sh-val { background: var(--red-bg); color: var(--red); font-weight: 600; }
+
+  .is-active .sh-val { box-shadow: inset 0 0 0 2px var(--dark); }
+  .is-active .sh-num { background: var(--dark); color: var(--white); }
+
+  /* Ячейки, на которые ссылается формула, — цветные рамки, как в Excel */
+  .ref-0 .sh-val { box-shadow: inset 0 0 0 2px #2563C9; }
+  .ref-1 .sh-val { box-shadow: inset 0 0 0 2px #C31532; }
+  .ref-2 .sh-val { box-shadow: inset 0 0 0 2px #7A3FA0; }
+  .ref-3 .sh-val { box-shadow: inset 0 0 0 2px #1A6B4A; }
+  .ref-4 .sh-val { box-shadow: inset 0 0 0 2px #B36B00; }
+
+  /* ─── Вводный экран ─── */
+  .howto { padding-left: 18px; }
+  .howto li { font-size: 14px; line-height: 1.6; color: var(--slate); }
+  .howto li + li { margin-top: 5px; }
+  .howto b { color: var(--dark); }
+
+  /* ─── Итоговый экран ─── */
+  .sum-list { border-top: 1px solid var(--border); }
+  .sum-item { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .sum-item__label { font-size: 14px; color: var(--slate); }
+  .sum-item__value { font-size: 15px; font-weight: 700; color: var(--dark); text-align: right; }
+
+  @media (max-width: 560px) {
+    .screen { min-height: 925px; }
+    .sh-row { grid-template-columns: 26px 1fr 112px; }
+    .sheet { font-size: 12px; }
+    .sh-row > div { padding: 5px 7px; }
+    .ops { flex-wrap: wrap; gap: 4px; }
+    .op { min-width: 34px; padding: 0 6px; }
+    .hintbox { min-height: 146px; }
+    .sum-item { flex-direction: column; gap: 2px; }
+    .sum-item__value { text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script src="common.js"></script>
+<script>
+/* =========================================================
+   Считаем эффект от внедрения идеи — таблица в духе Excel
+   Модуль 1 · «Зачем линейным руководителям изучать ОЭ»
+   Формулы вводятся со знака «=», ячейки выбираются щелчком
+   ========================================================= */
+
+var INPUTS = [
+  { id: 'B1', label: 'Время на один счёт сейчас, мин',           v: 18 },
+  { id: 'B2', label: 'Время на один счёт после внедрения, мин',  v: 10 },
+  { id: 'B3', label: 'Счетов в год',                             v: 420000 },
+  { id: 'B4', label: 'Полная стоимость часа специалиста, ₽',     v: 900,
+    note: 'Зарплата, налоги и накладные расходы в пересчёте на один час работы.' },
+  { id: 'B5', label: 'Внедрение робота, ₽ разово',               v: 6000000 },
+  { id: 'B6', label: 'Поддержка и лицензии, ₽ в год',            v: 12000000,
+    note: 'Оплачиваются за год вперёд.' },
+  { id: 'B7', label: 'Выручка компании, ₽ в год',                v: 12000000000 },
+  { id: 'B8', label: 'Операционные расходы, ₽ в год',            v: 10800000000 }
+];
+
+/* lo..hi — диапазон верных ответов; pct — ячейка в процентах
+   (принимаем и 180, и 1,8 — как в Excel с процентным форматом) */
+var CALC = [
+  { id: 'B10', label: 'Экономия времени, ч в год',
+    ask: 'Сколько часов в год сэкономит отдел после внедрения робота?',
+    help: 'Сколько минут экономится на одном счёте? Умножьте на число счетов и переведите минуты в часы.',
+    formula: '=(B1-B2)*B3/60', lo: 55950, hi: 56050,
+    traps: [
+      { v: 3360000,  msg: 'Это минуты. Переведите их в часы: разделите на 60.' },
+      { v: 126000,   msg: 'Это все часы на обработку счетов до внедрения. Нужна разница — сколько времени сэкономит робот.' },
+      { v: 70000,    msg: 'Это часы после внедрения. Нужна разница между «до» и «после».' },
+      { v: 7560000,  msg: 'Это все минуты до внедрения. Нужна разница во времени, и в часах.' },
+      { v: 933.33,   msg: 'Похоже, вы разделили на 60 дважды.' }
+    ] },
+  { id: 'B11', label: 'Экономия затрат, ₽ в год', money: true,
+    ask: 'Сколько компания сэкономит за год в рублях?',
+    help: 'Умножьте сэкономленные часы на полную стоимость часа работы.',
+    formula: '=B10*B4', lo: 50350000, hi: 50450000,
+    traps: [
+      { v: 3024000000, msg: 'Вы умножили на стоимость часа минуты, а не часы.' }
+    ] },
+  { id: 'B12', label: 'Чистый эффект за 1-й год, ₽', money: true,
+    ask: 'Сколько останется от экономии в первый год, если вычесть всё, что компания потратит на робота?',
+    help: 'Из экономии за год вычтите разовые затраты на внедрение и годовую поддержку.',
+    formula: '=B11-B5-B6', lo: 32350000, hi: 32450000,
+    traps: [
+      { v: 44400000, msg: 'Вы вычли только разовые затраты. Поддержку и лицензии в первый год тоже платят.' },
+      { v: 38400000, msg: 'Вы вычли только поддержку. Разовые затраты на внедрение тоже приходятся на первый год.' },
+      { v: 50400000, msg: 'Это экономия до вычета затрат. Вычтите затраты на робота в первый год.' }
+    ] },
+  { id: 'B13', label: 'Чистый эффект со 2-го года, ₽ в год', money: true,
+    ask: 'Сколько компания будет получать каждый год, начиная со второго?',
+    help: 'Со второго года разовых затрат уже нет, а поддержку и лицензии платят каждый год.',
+    formula: '=B11-B6', lo: 38350000, hi: 38450000,
+    traps: [
+      { v: 32400000, msg: 'Это первый год. Со второго года разовых затрат на внедрение уже нет.' },
+      { v: 50400000, msg: 'Поддержку и лицензии платят каждый год — их нужно вычесть.' },
+      { v: 44400000, msg: 'Со второго года нет разовых затрат, а поддержка остаётся. Вычесть нужно её.' }
+    ] },
+  { id: 'B14', label: 'Срок окупаемости, мес',
+    ask: 'За сколько месяцев экономия покроет затраты первого года? Внедрение и лицензии на год оплачиваются сразу, в самом начале.',
+    help: 'Затраты первого года (внедрение + лицензии) ÷ экономия в месяц.',
+    formula: '=(B5+B6)/(B11/12)', lo: 4.2, hi: 4.4,
+    traps: [
+      { v: 1.875,  msg: 'Так выходит, если платить за поддержку помесячно. Здесь лицензии оплачены за год вперёд: в начале компания тратит сразу и внедрение, и лицензии.' },
+      { v: 1.4286, msg: 'Вы учли только внедрение. Лицензии на первый год тоже оплачены в самом начале.' },
+      { v: 5.625,  msg: 'Лицензии уже учтены в затратах. Вычитать их из экономии второй раз не нужно — делите на экономию в месяц.' },
+      { v: 6.6667, msg: 'Делите на экономию в месяц, а не на чистый эффект: затраты и так уже стоят в числителе.' },
+      { v: 0.35714, msg: 'Это срок в годах. Нужны месяцы.' },
+      { v: 0.23333, msg: 'Вы разделили наоборот — экономию на затраты.' }
+    ] },
+  { id: 'B15', label: 'ROI за 1-й год, %', pct: true,
+    ask: 'ROI за 1-й год = (экономия за год − затраты 1-го года) ÷ затраты 1-го года × 100%.',
+    help: 'Затраты первого года — это разовое внедрение плюс годовая поддержка.',
+    formula: '=B12/(B5+B6)*100', lo: 179.5, hi: 180.5,
+    traps: [
+      { v: 540,    msg: 'В знаменателе нужны все затраты первого года: и внедрение, и поддержка.' },
+      { v: 280,    msg: 'Вы разделили экономию на затраты. ROI считают от чистого эффекта — экономии за вычетом затрат.' },
+      { v: 213.33, msg: 'Возьмите чистый эффект первого года, а не второго.' },
+      { v: 640,    msg: 'ROI за первый год: чистый эффект первого года ÷ все затраты первого года.' }
+    ] },
+  { id: 'B16', label: 'Операционная маржа до внедрения, %', pct: true,
+    ask: 'Операционная маржа = (выручка − операционные расходы) ÷ выручка × 100%. Какой она была до внедрения?',
+    help: 'Сначала найдите, что остаётся от выручки после операционных расходов, потом — какая это доля выручки.',
+    formula: '=(B7-B8)/B7*100', lo: 9.99, hi: 10.01,
+    traps: [
+      { v: 90,         msg: 'Это доля расходов в выручке. Маржа — то, что остаётся: (выручка − расходы) ÷ выручка.' },
+      { v: 1200000000, msg: 'Это операционная прибыль в рублях. Маржа — её доля в выручке, в процентах.' },
+      { v: 11.111,     msg: 'Делить нужно на выручку, а не на расходы.' }
+    ] },
+  { id: 'B17', label: 'Операционная маржа после внедрения, %', pct: true,
+    ask: 'Какой станет маржа? Операционные расходы уменьшатся на чистый эффект со 2-го года, выручка останется прежней.',
+    help: '(выручка − (операционные расходы − чистый эффект со 2-го года)) ÷ выручка × 100%.',
+    formula: '=(B7-(B8-B13))/B7*100', lo: 10.315, hi: 10.325,
+    traps: [
+      { v: 10.42,  msg: 'Вы уменьшили расходы на всю экономию. Но поддержку робота платят каждый год — возьмите чистый эффект со 2-го года.' },
+      { v: 10.27,  msg: 'Это маржа первого года, с разовыми затратами. Нужна маржа, которая сохранится и дальше, — с эффектом со 2-го года.' },
+      { v: 0.32,   msg: 'Это прирост маржи. В ячейке нужна сама маржа после внедрения.' },
+      { v: 89.68,  msg: 'Это доля расходов в выручке, а нужна маржа.' }
+    ] }
+];
+
+var CELL = {};
+(function() {
+  var k;
+  for (k = 0; k < INPUTS.length; k++) { INPUTS[k].input = true; CELL[INPUTS[k].id] = INPUTS[k]; }
+  for (k = 0; k < CALC.length; k++) CELL[CALC[k].id] = CALC[k];
+})();
+
+var state = {
+  screen: 'intro',
+  active: 'B10',
+  raw: {},        /* что введено в ячейки расчёта */
+  attempts: {},   /* неудачные попытки по ячейкам */
+  revealed: {},   /* ячейки, где показали решение */
+  msg: null,      /* сообщение об ошибке для активной ячейки */
+  flash: null,    /* ячейка, которую только что посчитали верно */
+  lastRef: null,  /* последняя вставленная щелчком ссылка — для замены */
+  editor: 'cell', /* где идёт ввод: 'cell' или 'bar' */
+  idle: false     /* всё посчитано — в активной ячейке показываем результат */
+};
+
+/* ─── Числа ─────────────────────────────────────────────── */
+
+function fmt(v) {
+  if (!isFinite(v)) return '#ОШИБКА';
+  var neg = v < 0;
+  var a = Math.abs(v);
+  var r = Math.round(a * 100) / 100;
+  var parts = (Math.abs(r - Math.round(r)) < 1e-9 ? String(Math.round(r)) : r.toFixed(2)).split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return (neg ? '−' : '') + parts.join(',');
+}
+
+function near(a, b, rel) {
+  return Math.abs(a - b) <= Math.abs(b) * rel;
+}
+
+/* ─── Разбор формул ─────────────────────────────────────── */
+
+function normalize(s) {
+  return s.replace(/[×хx]/g, '*').replace(/÷/g, '/').replace(/[−–—]/g, '-')
+          .replace(/[ВвBb]/g, 'B').replace(/,/g, '.').replace(/\s+/g, '').replace(/ /g, '');
+}
+
+function refsOf(raw) {
+  if (!raw || raw.charAt(0) !== '=') return [];
+  var m = normalize(raw.slice(1)).match(/B\d+/g) || [];
+  var out = [];
+  for (var i = 0; i < m.length; i++) if (out.indexOf(m[i]) < 0) out.push(m[i]);
+  return out;
+}
+
+/* Значение ячейки: { v } или { err: 'parse' | 'div0' | 'cycle' | 'ref' | 'text' } */
+function valueOf(id, visiting) {
+  var c = CELL[id];
+  if (!c) return { err: 'ref', ref: id };
+  if (c.input) return { v: c.v };
+  var raw = (state.raw[id] || '').trim();
+  if (raw === '') return { v: 0, empty: true };
+  if (raw.charAt(0) !== '=') {
+    var s = raw.replace(/[\s ₽]/g, '').replace(/%$/, '').replace(',', '.');
+    if (!/^-?\d+(\.\d+)?$/.test(s)) return { err: 'text' };
+    return { v: parseFloat(s) };
+  }
+  visiting = visiting || {};
+  if (visiting[id]) return { err: 'cycle' };
+  visiting[id] = true;
+  var res = evalExpr(normalize(raw.slice(1)), visiting);
+  visiting[id] = false;
+  return res;
+}
+
+function evalExpr(src, visiting) {
+  var pos = 0;
+  function peek() { return src.charAt(pos); }
+  function fail(code, ref) { throw { err: code, ref: ref }; }
+
+  function expr() {
+    var v = term();
+    while (peek() === '+' || peek() === '-') {
+      var op = src.charAt(pos++);
+      var r = term();
+      v = (op === '+') ? v + r : v - r;
+    }
+    return v;
+  }
+  function term() {
+    var v = factor();
+    while (peek() === '*' || peek() === '/') {
+      var op = src.charAt(pos++);
+      var r = factor();
+      if (op === '/') { if (r === 0) fail('div0'); v = v / r; }
+      else v = v * r;
+    }
+    return v;
+  }
+  function factor() {
+    var ch = peek();
+    if (ch === '-') { pos++; return -factor(); }
+    if (ch === '+') { pos++; return factor(); }
+    if (ch === '(') {
+      pos++;
+      var v = expr();
+      if (peek() !== ')') fail('parse');
+      pos++;
+      return v;
+    }
+    var m = src.slice(pos).match(/^(\d+(\.\d+)?|\.\d+)/);
+    if (m) { pos += m[0].length; return parseFloat(m[0]); }
+    m = src.slice(pos).match(/^B\d+/);
+    if (m) {
+      pos += m[0].length;
+      var r = valueOf(m[0], visiting);
+      if (r.err) fail(r.err === 'text' ? 'ref' : r.err, r.ref || m[0]);
+      return r.v;
+    }
+    fail('parse');
+  }
+
+  try {
+    if (src === '') return { err: 'parse' };
+    var v = expr();
+    if (pos !== src.length) return { err: 'parse' };
+    return { v: v };
+  } catch (e) {
+    if (e && e.err) return e;
+    return { err: 'parse' };
+  }
+}
+
+/* ─── Проверка ячейки ───────────────────────────────────── */
+
+function candidates(c, v) {
+  return c.pct ? [v, v * 100] : [v];
+}
+
+function isRight(c, v) {
+  var xs = candidates(c, v);
+  for (var i = 0; i < xs.length; i++) if (xs[i] >= c.lo && xs[i] <= c.hi) return true;
+  return false;
+}
+
+function statusOf(id) {
+  var raw = (state.raw[id] || '').trim();
+  if (raw === '') return 'empty';
+  var r = valueOf(id);
+  if (r.err || !isRight(CELL[id], r.v)) return 'bad';
+  return state.revealed[id] ? 'rev' : 'ok';
+}
+
+var ERR_TEXT = {
+  parse: 'Формулу не получается посчитать. Проверьте скобки и знаки.',
+  div0:  'В формуле деление на ноль — возможно, она ссылается на пустую ячейку.',
+  cycle: 'Формула ссылается сама на себя.',
+  text:  'Чтобы посчитать выражение, начните его со знака «=».'
+};
+
+function diagnose(id) {
+  var c = CELL[id];
+  var raw = state.raw[id].trim();
+  var r = valueOf(id);
+  if (r.err === 'ref') return 'В формуле ссылка на ячейку без данных: ' + r.ref + '.';
+  if (r.err) return ERR_TEXT[r.err];
+
+  /* Формула опирается на пустую или неверную ячейку */
+  var refs = refsOf(raw);
+  for (var i = 0; i < refs.length; i++) {
+    var rc = CELL[refs[i]];
+    if (!rc || rc.input) continue;
+    var st = statusOf(refs[i]);
+    if (st === 'empty') return 'Ячейка ' + refs[i] + ' пока пустая. Сначала посчитайте её.';
+    if (st === 'bad') return 'Формула опирается на ячейку ' + refs[i] + ', в которой пока ошибка. Сначала исправьте её.';
+  }
+
+  var xs = candidates(c, r.v);
+  var k, t;
+  for (k = 0; k < c.traps.length; k++) {
+    for (t = 0; t < xs.length; t++) {
+      if (near(xs[t], c.traps[k].v, 0.001)) return c.traps[k].msg;
+    }
+  }
+  if (c.money && r.v * 1e6 >= c.lo && r.v * 1e6 <= c.hi) {
+    return 'Похоже, вы ввели в миллионах. В этой ячейке нужны рубли.';
+  }
+  var mid = (c.lo + c.hi) / 2;
+  for (t = 0; t < xs.length; t++) {
+    if (near(xs[t], mid, 0.03)) return 'Почти. Проверьте округление и посчитайте точнее.';
+  }
+  return 'Пока не сходится. ' + c.help;
+}
+
+/* ─── Отрисовка ─────────────────────────────────────────── */
+
+function rowHtml(id, num) {
+  var c = CELL[id];
+  return '<div class="sh-row sh-click" data-cell="' + id + '">'
+    + '<div class="sh-num">' + num + '</div>'
+    + '<div class="sh-label">' + c.label + '</div>'
+    + '<div class="sh-val' + (c.input ? ' sh-val--input' : '') + '" id="v-' + id + '"></div>'
+    + '</div>';
+}
+
+function renderIntro() {
+  return '<div class="screen__body screen__body--center">'
+    +   '<h1 class="page-title">Считаем эффект<span>от внедрения идеи</span></h1>'
+    +   '<div class="divider"></div>'
+    +   '<p class="lead-text">Компания с выручкой 12 млрд ₽ в год автоматизирует отдел, который обрабатывает счета от поставщиков. Программа-робот (RPA) сама переносит данные из счетов в учётную систему, и на один счёт вместо 18 минут уходит 10. Внедрение стоит 6 млн ₽, лицензии и поддержка — 12 млн ₽ в год, их оплачивают за год вперёд.</p>'
+    +   '<p class="lead-text mt-sm">Посчитайте, что это даст компании: сколько она сэкономит, когда вернёт вложения и как изменится операционная маржа. Считаем, что всё высвобожденное время превращается в экономию — например, можно сократить штат или отказаться от аутсорсинга.</p>'
+    +   '<div class="card mt-md">'
+    +     '<ul class="howto">'
+    +       '<li>Вводите в ячейки <b>числа или формулы</b>, как в Excel: формула начинается со знака «=».</li>'
+    +       '<li>Формулу можно набирать прямо в ячейке или в строке над таблицей. <b>Ячейки для формулы выбирайте щелчком</b> — адрес подставится сам.</li>'
+    +       '<li>Под таблицей — <b>подсказка</b>: что считать в выбранной ячейке. Если ошибётесь, там же появится пояснение.</li>'
+    +     '</ul>'
+    +   '</div>'
+    + '</div>'
+    + '<button class="btn btn--primary btn--full mt-md" onclick="go(\'sheet\')">Открыть таблицу →</button>';
+}
+
+function renderSheet() {
+  var rows = '<div class="sh-row sh-head"><div></div><div>A</div><div>B</div></div>';
+  var k;
+  for (k = 0; k < INPUTS.length; k++) rows += rowHtml(INPUTS[k].id, k + 1);
+  rows += '<div class="sh-row sh-section"><div class="sh-num">9</div><div class="sh-label">Расчёт</div><div class="sh-val"></div></div>';
+  for (k = 0; k < CALC.length; k++) rows += rowHtml(CALC[k].id, k + 10);
+
+  var ops = ['=', '+', '−', '×', '÷', '(', ')'];
+  var opsHtml = '';
+  for (k = 0; k < ops.length; k++) opsHtml += '<button class="op" data-op="' + ops[k] + '">' + ops[k] + '</button>';
+  opsHtml += '<button class="op op--enter" data-op="enter">Ввод</button>';
+
+  return '<div class="screen__body">'
+    +   '<div class="fbar">'
+    +     '<div class="fbar__name" id="nm"></div>'
+    +     '<div class="fbar__fx">fx</div>'
+    +     '<input id="bar" class="fbar__input" type="text" inputmode="decimal" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Число или формула, например =B1-B2">'
+    +   '</div>'
+    +   '<div class="sheet">' + rows + '</div>'
+    +   '<div class="ops">' + opsHtml + '</div>'
+    +   '<div id="hint" class="hintbox"></div>'
+    + '</div>'
+    + '<div class="nav-bar">'
+    +   '<button id="done-btn" class="btn btn--primary btn--full" onclick="go(\'final\')" disabled>Посчитайте все ячейки</button>'
+    + '</div>';
+}
+
+function renderFinal() {
+  var items = [
+    ['Экономия времени', '56 000 ч в год'],
+    ['Экономия затрат', '50,4 млн ₽ в год'],
+    ['Чистый эффект', '32,4 млн ₽ в 1-й год,<br>38,4 млн ₽ — в следующие'],
+    ['Окупаемость', 'около 4,3 месяца'],
+    ['ROI за 1-й год', '180%'],
+    ['Операционная маржа', '10% → 10,32%']
+  ];
+  var list = '';
+  for (var k = 0; k < items.length; k++) {
+    list += '<div class="sum-item"><span class="sum-item__label">' + items[k][0] + '</span><span class="sum-item__value">' + items[k][1] + '</span></div>';
+  }
+  return '<div class="screen__body screen__body--center">'
+    +   '<h2 class="section-title">Что получилось</h2>'
+    +   '<div class="divider"></div>'
+    +   '<div class="sum-list">' + list + '</div>'
+    +   '<p class="lead-text mt-md">Робот в одном отделе сократил обработку счёта на 8 минут. Для компании это 38,4 млн ₽ в год и плюс 0,32 п. п. операционной маржи.</p>'
+    +   '<p class="lead-text mt-sm">Такой расчёт — сколько сэкономим, сколько потратим и когда вернём вложения — и нужен, чтобы обосновать идею перед руководством.</p>'
+    + '</div>'
+    + '<div class="nav-bar">'
+    +   '<button class="btn btn--secondary" onclick="go(\'sheet\')">← К таблице</button>'
+    +   '<button class="btn btn--primary" onclick="restart()">Пройти заново</button>'
+    + '</div>';
+}
+
+function render() {
+  var body;
+  if (state.screen === 'intro') body = renderIntro();
+  else if (state.screen === 'sheet') body = renderSheet();
+  else body = renderFinal();
+  document.getElementById('app').innerHTML = '<div class="page-wrap--compact screen anim-fade-up">' + body + '</div>';
+  if (state.screen === 'sheet') bindSheet();
+  notifyHeight();
+}
+
+/* ─── Обновление листа на месте (без перерисовки и без потери фокуса) ─── */
+
+function bar() { return document.getElementById('bar'); }
+function cellInput() { return document.getElementById('ci'); }
+
+/* Где сейчас идёт ввод: в ячейке или в строке формул. Оба поля синхронны */
+function editorEl() {
+  var ci = cellInput();
+  if (state.editor === 'bar' || !ci) return bar();
+  return ci;
+}
+
+function editorText() { return editorEl().value; }
+
+function mirror(from) {
+  var other = (from === bar()) ? cellInput() : bar();
+  if (other && other !== from) other.value = from.value;
+  fitCellInput();
+}
+
+/* Длинная формула не помещается в ячейку — поле растёт влево, поверх столбца A, как в Excel */
+function fitCellInput() {
+  var ci = cellInput();
+  if (!ci) return;
+  ci.style.width = '100%';
+  if (ci.scrollWidth > ci.clientWidth) {
+    var row = ci.parentNode.parentNode;
+    var maxW = row.clientWidth - 34;
+    ci.style.width = Math.min(ci.scrollWidth + 14, maxW) + 'px';
+  }
+}
+
+function makeCellInput(host, id) {
+  host.textContent = '';
+  var ci = document.createElement('input');
+  ci.id = 'ci';
+  ci.className = 'cell-input';
+  ci.type = 'text';
+  ci.setAttribute('inputmode', 'decimal');
+  ci.setAttribute('autocomplete', 'off');
+  ci.setAttribute('spellcheck', 'false');
+  ci.value = state.raw[id] || '';
+  host.appendChild(ci);
+  bindEditor(ci);
+  fitCellInput();
+}
+
+function refreshCells() {
+  var refs = isCalc(state.active) ? refsOf(editorText()) : [];
+  var rows = document.querySelectorAll('.sh-click');
+  for (var k = 0; k < rows.length; k++) {
+    var id = rows[k].getAttribute('data-cell');
+    var c = CELL[id];
+    var host = document.getElementById('v-' + id);
+    var cls = 'sh-row sh-click';
+    var text = '';
+    if (c.input) {
+      text = fmt(c.v);
+    } else {
+      var raw = (state.raw[id] || '').trim();
+      if (raw !== '') {
+        var r = valueOf(id);
+        if (r.err) text = (r.err === 'div0') ? '#ДЕЛ/0!' : (r.err === 'text' ? raw : '#ОШИБКА');
+        else if (c.pct) text = fmt((r.v >= c.lo / 100 && r.v <= c.hi / 100) ? r.v * 100 : r.v) + '%';
+        else text = fmt(r.v);
+      }
+      var st = statusOf(id);
+      if (st !== 'empty') cls += ' st-' + st;
+    }
+    if (id === state.active) cls += ' is-active';
+    var ri = refs.indexOf(id);
+    if (ri >= 0 && id !== state.active) cls += ' ref-' + (ri % 5);
+    rows[k].className = cls;
+
+    /* В активной ячейке расчёта — поле ввода; его не трогаем, чтобы не сбить курсор */
+    if (id === state.active && isCalc(id) && !state.idle) {
+      if (!host.querySelector('#ci')) makeCellInput(host, id);
+    } else {
+      host.textContent = text;
+    }
+  }
+}
+
+function allDone() {
+  for (var k = 0; k < CALC.length; k++) {
+    var st = statusOf(CALC[k].id);
+    if (st !== 'ok' && st !== 'rev') return false;
+  }
+  return true;
+}
+
+function refreshHint() {
+  var id = state.active;
+  var c = CELL[id];
+  var box = document.getElementById('hint');
+  var h = '<b>' + id + ' · ' + c.label + '</b><br>';
+  var err = false;
+
+  if (c.input) {
+    h += 'Исходные данные. ' + (c.note ? c.note + ' ' : '') + 'Их можно использовать в формулах.';
+  } else if (state.msg) {
+    err = true;
+    h += state.msg;
+    if ((state.attempts[id] || 0) >= 2) {
+      h += '<br><button class="reveal-btn" data-reveal="1">Показать решение</button>';
+    }
+  } else {
+    var st = statusOf(id);
+    if (state.flash) h = '<span class="hint-ok">✓ ' + state.flash + ' — верно.</span> ' + h;
+    if (st === 'rev') {
+      h += 'Решение: <span class="hint-formula">' + c.formula + '</span>. ' + c.help;
+    } else if (st === 'ok') {
+      h += '<span class="hint-ok">Посчитано верно.</span> ' + c.ask;
+    } else {
+      h += c.ask;
+    }
+  }
+  if (allDone() && !err) {
+    h = '<span class="hint-ok">Все ячейки посчитаны.</span> Можно смотреть итог — кнопка под таблицей.';
+  }
+  box.className = 'hintbox' + (err ? ' hintbox--err' : '');
+  box.innerHTML = h;
+
+  var rb = box.querySelector('[data-reveal]');
+  if (rb) bindPress(rb, reveal);
+
+  var done = document.getElementById('done-btn');
+  done.disabled = !allDone();
+  done.textContent = allDone() ? 'Посмотреть итог →' : 'Посчитайте все ячейки';
+}
+
+function refresh() {
+  document.getElementById('nm').textContent = state.active;
+  refreshCells();
+  refreshHint();
+  notifyHeight();
+}
+
+/* ─── Выбор ячейки, ввод, ссылки ────────────────────────── */
+
+function isCalc(id) { return !!CELL[id] && !CELL[id].input; }
+
+function select(id, focus) {
+  state.active = id;
+  state.msg = null;
+  state.lastRef = null;
+  state.editor = 'cell';
+  state.idle = false;
+  var old = cellInput();
+  if (old) old.parentNode.textContent = '';
+  var b = bar();
+  if (isCalc(id)) {
+    b.readOnly = false;
+    b.value = state.raw[id] || '';
+  } else {
+    b.readOnly = true;
+    b.value = fmt(CELL[id].v);
+  }
+  refresh();
+  var el = editorEl();
+  if (focus && isCalc(id)) {
+    el.focus();
+    var n = el.value.length;
+    try { el.setSelectionRange(n, n); } catch (e) {}
+  } else if (!isCalc(id)) {
+    b.blur();
+  }
+}
+
+function nextCalc(id) {
+  var idx = -1, k;
+  for (k = 0; k < CALC.length; k++) if (CALC[k].id === id) idx = k;
+  for (k = 1; k <= CALC.length; k++) {
+    var cand = CALC[(idx + k) % CALC.length].id;
+    var st = statusOf(cand);
+    if (st !== 'ok' && st !== 'rev') return cand;
+  }
+  return id;
+}
+
+/* Enter / «Ввод»: записываем значение и проверяем */
+function commit(moveOn) {
+  var id = state.active;
+  if (!isCalc(id)) return 'skip';
+  state.raw[id] = editorText().trim();
+  if (state.raw[id] !== CELL[id].formula) state.revealed[id] = false;
+  var st = statusOf(id);
+  if (st === 'empty') { state.msg = null; refresh(); return 'empty'; }
+  if (st === 'ok' || st === 'rev') {
+    /* Всё посчитано: убираем поле ввода, в ячейке — результат, как в Excel после Enter */
+    if (allDone()) {
+      state.idle = true;
+      state.msg = null;
+      var ci = cellInput();
+      if (ci) { ci.blur(); ci.parentNode.textContent = ''; }
+      refresh();
+      return 'ok';
+    }
+    if (moveOn) {
+      var nxt = nextCalc(id);
+      select(nxt, true);
+      state.flash = (nxt !== id) ? id : null;
+      refreshHint();
+    } else {
+      state.msg = null;
+      refresh();
+    }
+    return 'ok';
+  }
+  state.attempts[id] = (state.attempts[id] || 0) + 1;
+  state.flash = null;
+  state.msg = diagnose(id);
+  refresh();
+  return 'bad';
+}
+
+function reveal() {
+  var id = state.active;
+  state.raw[id] = CELL[id].formula;
+  state.revealed[id] = true;
+  state.flash = null;
+  select(id, false);
+}
+
+/* Режим указания: после «=», оператора или «(» щелчок вставляет адрес */
+function caretPos() {
+  var el = editorEl();
+  return (document.activeElement === el && typeof el.selectionStart === 'number') ? el.selectionStart : el.value.length;
+}
+
+function canPoint() {
+  var val = editorText();
+  if (val.charAt(0) !== '=') return false;
+  var p = caretPos();
+  if (state.lastRef && state.lastRef.end === p) return true;
+  var before = val.slice(0, p).replace(/\s+$/, '');
+  return /[=+\-*\/(×÷−]$/.test(before);
+}
+
+function insertText(text, asRef) {
+  var el = editorEl();
+  var p = caretPos();
+  var start = p, end = p;
+  if (asRef && state.lastRef && state.lastRef.end === p) start = state.lastRef.start;
+  else if (document.activeElement === el) end = el.selectionEnd;
+  el.value = el.value.slice(0, start) + text + el.value.slice(end);
+  var np = start + text.length;
+  state.lastRef = asRef ? { start: start, end: np } : null;
+  el.focus();
+  try { el.setSelectionRange(np, np); } catch (e) {}
+  mirror(el);
+  state.msg = null;
+  refreshCells();
+}
+
+function onCellPress(id) {
+  var a = state.active;
+  if (id === a) { if (isCalc(a)) editorEl().focus(); return; }
+  if (isCalc(a)) {
+    if (canPoint()) { insertText(id, true); return; }
+    if (editorText().trim() !== (state.raw[a] || '')) {
+      if (commit(false) === 'bad') return;
+      state.flash = (statusOf(a) === 'ok' || statusOf(a) === 'rev') ? a : null;
+      var keep = state.flash;
+      select(id, true);
+      state.flash = keep;
+      refreshHint();
+      return;
+    }
+  }
+  state.flash = null;
+  select(id, true);
+}
+
+function onOpPress(op) {
+  if (op === 'enter') { commit(true); return; }
+  if (!isCalc(state.active)) return;
+  var map = { '−': '-', '×': '*', '÷': '/' };
+  insertText(map[op] || op, false);
+}
+
+/* Нажатие без потери фокуса в строке формул: и мышью, и пальцем.
+   Касание со сдвигом — это прокрутка, его не считаем нажатием */
+function bindPress(el, fn) {
+  var sx = 0, sy = 0, moved = false;
+  function onInput(e) { return e.target && e.target.tagName === 'INPUT'; }
+  el.addEventListener('mousedown', function(e) { if (onInput(e)) return; e.preventDefault(); fn(); });
+  el.addEventListener('touchstart', function(e) {
+    moved = false; sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+  }, { passive: true });
+  el.addEventListener('touchmove', function(e) {
+    if (Math.abs(e.touches[0].clientX - sx) > 8 || Math.abs(e.touches[0].clientY - sy) > 8) moved = true;
+  }, { passive: true });
+  el.addEventListener('touchend', function(e) {
+    if (moved || onInput(e)) return;
+    e.preventDefault();
+    fn();
+  });
+}
+
+/* Общие обработчики для ячейки и строки формул */
+function bindEditor(el) {
+  el.addEventListener('focus', function() { state.editor = (el === bar()) ? 'bar' : 'cell'; });
+  el.addEventListener('input', function() { state.lastRef = null; state.msg = null; mirror(el); refreshCells(); });
+  el.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); commit(true); }
+    if (e.key === 'Escape') {
+      el.value = state.raw[state.active] || '';
+      mirror(el);
+      state.lastRef = null;
+      refreshCells();
+    }
+  });
+}
+
+function bindSheet() {
+  var rows = document.querySelectorAll('.sh-click');
+  for (var k = 0; k < rows.length; k++) {
+    (function(id, el) { bindPress(el, function() { onCellPress(id); }); })(rows[k].getAttribute('data-cell'), rows[k]);
+  }
+  var ops = document.querySelectorAll('[data-op]');
+  for (k = 0; k < ops.length; k++) {
+    (function(op, el) { bindPress(el, function() { onOpPress(op); }); })(ops[k].getAttribute('data-op'), ops[k]);
+  }
+  bindEditor(bar());
+  select(state.active, false);
+}
+
+/* ─── Переходы ──────────────────────────────────────────── */
+
+function go(screen) {
+  state.screen = screen;
+  state.flash = null;
+  state.msg = null;
+  render();
+}
+
+function restart() {
+  state.raw = {};
+  state.attempts = {};
+  state.revealed = {};
+  state.active = 'B10';
+  go('intro');
+}
+
+render();
+</script>
+</body>
+</html>
