@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Один пилот и три уровня</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* ─── Экран: фиксированная высота, чтобы iframe не прыгал ─── */
+  .screen { min-height: 700px; }
+  .screen__body { flex: 1; display: flex; flex-direction: column; }
+  .screen__body--center { justify-content: center; }
+
+  /* ─── Вводный экран ─── */
+  .given { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .given__item { padding: 10px 12px; background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius-md); }
+  .given__num { font-family: var(--font-display); font-size: 19px; font-weight: 900; color: var(--dark); line-height: 1.2; }
+  .given__txt { font-size: 12px; color: var(--slate); line-height: 1.35; }
+
+  .lv-list { display: flex; flex-direction: column; gap: 6px; }
+  .lv-item { padding: 8px 12px; background: var(--white); border: 1.5px solid var(--border); border-left: 4px solid var(--dark); border-radius: var(--radius-md); font-size: 13px; line-height: 1.4; color: var(--slate); }
+  .lv-item strong { color: var(--dark); }
+  .lv-item:nth-child(2) { border-left-color: var(--amber); }
+  .lv-item:nth-child(3) { border-left-color: var(--red); }
+
+  /* ─── Развилка ─── */
+  .sit { padding: 14px 16px; }
+  .sit__title { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--dark); line-height: 1.25; }
+  .sit__text { font-size: 14px; color: var(--slate); line-height: 1.55; margin-top: 6px; }
+
+  .opts { display: flex; flex-direction: column; gap: 8px; }
+  .opt { padding: 11px 14px; font-size: 14px; line-height: 1.45; color: var(--dark); }
+  .opt--locked { cursor: default; pointer-events: none; }
+  .opt--gone { display: none; }
+
+  /* ─── Разбор ─── */
+  .fb-zone { display: flex; flex-direction: column; }
+  .fb-zone .hint {
+    font-size: 13px;
+    color: var(--slate);
+    text-align: center;
+    padding: 18px 10px;
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius-md);
+  }
+  .levels { margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(0, 0, 0, .08); display: flex; flex-direction: column; gap: 5px; }
+  .lvl { display: flex; gap: 8px; align-items: baseline; font-size: 13px; line-height: 1.4; color: var(--slate); }
+  .lvl b { color: var(--dark); font-weight: 600; }
+  .dot { flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; position: relative; top: 1px; }
+  .dot--ok  { background: var(--green); }
+  .dot--mid { background: #D9A400; }
+  .dot--bad { background: var(--red); }
+
+  /* ─── Итог ─── */
+  .path { display: flex; flex-direction: column; gap: 6px; }
+  .path__row { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius-md); }
+  .path__row .dot { top: 5px; }
+  .path__main { flex: 1; min-width: 0; }
+  .path__step { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--slate); }
+  .path__choice { font-size: 14px; color: var(--dark); line-height: 1.35; }
+  .path__tag { flex-shrink: 0; font-size: 11px; line-height: 1.3; color: var(--slate); text-align: right; max-width: 150px; padding-top: 2px; }
+  .signs { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .real { font-size: 14px; line-height: 1.5; color: var(--slate); }
+  .real li { margin-left: 18px; }
+  .real li + li { margin-top: 4px; }
+  .real__head { font-size: 13px; font-weight: 700; color: var(--dark); }
+
+  @media (max-width: 560px) {
+    .given { grid-template-columns: 1fr; gap: 6px; }
+    .given__item { display: flex; align-items: baseline; gap: 10px; padding: 8px 12px; }
+    .given__num { font-size: 17px; flex-shrink: 0; min-width: 92px; }
+    .sit { padding: 12px 14px; }
+    .sit__title { font-size: 17px; }
+    .path__row { flex-wrap: wrap; }
+    .path__tag { flex-basis: 100%; text-align: left; max-width: none; padding: 0 0 0 19px; }
+    .screen { min-height: 980px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script src="common.js"></script>
+<script>
+/* =========================================================
+   Один пилот и три уровня
+   Розничная сеть внедряет систему прогнозирования спроса.
+   Ученик — руководитель проекта внедрения, пять развилок.
+   В разборе — что было дальше и как это отразилось на каждом уровне.
+   В финале — путь ученика и как было на самом деле.
+   ========================================================= */
+
+var LV = ['Корпоративный', 'ИТ', 'Закупки и склад'];
+
+var TYPES = {
+  gap:    'Разрыв целей',
+  bureau: 'Бюрократическая ловушка',
+  res:    'Конфликт ресурсов'
+};
+
+/* Опции: type — ok / gap / bureau / res; mech — механизм согласования;
+   scene и lv могут быть функциями от прошлых решений */
+var STEPS = [
+  {
+    title: 'Задачи командам',
+    text: 'Совет директоров ждёт пилот через три месяца. Вам нужно поставить задачи двум командам — ИТ-департаменту и отделу закупок и логистики. Как сформулируете?',
+    opts: [
+      {
+        label: 'ИТ — запустить систему к сроку. Закупкам — к концу квартала делать 90% заказов через новую систему.',
+        short: 'Каждой команде — своя цифра',
+        type: 'gap',
+        scene: 'Обе команды взялись за свои цифры. ИТ торопится к сроку и откладывает проверку прогнозов на потом. Закупщики, чтобы выйти на 90%, проводят заказы через систему, даже когда видят, что она ошибается: за ручной заказ теперь срезают премию.',
+        lv: [['ok', 'Сроки и цифры есть, отчитываться есть чем.'], ['mid', 'Работают на срок, а не на точность прогноза.'], ['bad', 'Заказывают через систему, даже когда она ошибается.']]
+      },
+      {
+        label: 'Дать обеим командам общую цель — меньше списаний и товар на полках в пилотных магазинах. ИТ отвечает за точность прогноза, закупки — за то, чтобы на время перехода полки были не хуже, чем сейчас.',
+        short: 'Общая цель и свой показатель у каждого',
+        type: 'ok',
+        mech: 'каскадирование целей',
+        scene: 'Команды видят, что работают на один результат. ИТ проверяет прогноз на прошлых продажах, а не просто запускает систему к сроку. Закупщики знают: если система ошибается, можно заказать вручную, и за это не накажут.',
+        lv: [['ok', 'Цель совета разложена на понятные задачи.'], ['ok', 'Отвечают за точность прогноза, а не только за срок.'], ['ok', 'Знают, что главное — товар на полках.']]
+      },
+      {
+        label: 'Подготовить подробный план внедрения и поручить каждому отделу — ИТ, закупкам, складу, финансам — написать свой регламент перехода на новую систему.',
+        short: 'Свой регламент в каждом отделе',
+        type: 'bureau',
+        scene: 'Через месяц у вас четыре регламента. Финансы ввели согласование каждой закупки сверх плана, ИТ принимает заявки на изменения раз в две недели, склад придумал новую форму приёмки. Система ещё не настроена, а согласования уже съедают треть рабочего времени.',
+        lv: [['mid', 'Документы есть, результата пока нет.'], ['mid', 'Любая доработка ждёт очередного окна для изменений.'], ['bad', 'К ручному заказу добавились новые формы и подписи.']]
+      }
+    ]
+  },
+  {
+    title: 'Деньги',
+    text: 'ИТ-директор говорит: для нормальной интеграции с устаревшей 1С нужно ещё 15 млн ₽ — на промежуточное ПО и новый сервер. Совет дал ровно 50 млн. Финансовый департамент предлагает найти деньги, сократив часть закупщиков: «Система же заменит ручной заказ».',
+    opts: [
+      {
+        label: 'Уложиться в 50 млн: попросить ИТ обойтись без промежуточного ПО и работать на старом сервере.',
+        short: 'Уложиться в 50 млн',
+        type: 'res',
+        scene: 'Совет доволен: бюджет не растёт. ИТ подключает систему к 1С напрямую, на старом сервере, который едва справляется с данными о продажах за два года. Настройка займёт больше времени, а запаса по срокам нет.',
+        lv: [['ok', 'Бюджет в рамках.'], ['bad', 'Интеграцию делают без нужных инструментов.'], ['mid', 'Пока не затронуты, но система будет ошибаться.']]
+      },
+      {
+        label: 'Согласиться с финансистами: сократить часть закупщиков, а сэкономленное отдать на доработки ИТ.',
+        short: 'Сократить закупщиков ради ИТ',
+        type: 'gap',
+        scene: 'Деньги на доработки нашлись. Но цель проекта — товар на полках, а людей, которые его заказывают, стало меньше ещё до того, как система заработала. Оставшиеся закупщики забирают себе магазины уволенных коллег.',
+        lv: [['ok', 'Бюджет в рамках, расходы на штат ниже.'], ['ok', 'Деньги на интеграцию есть.'], ['bad', 'Людей меньше, магазинов столько же.']]
+      },
+      {
+        label: 'Посчитать вместе с ИТ и финансами и прийти к руководству с двумя вариантами: добавить 15 млн или сократить пилот с 60 магазинов до 20.',
+        short: 'Расчёт и два варианта руководству',
+        type: 'ok',
+        mech: 'диалог «планирование — проверка»',
+        scene: 'Генеральный директор не хочет просить у совета ещё денег, но соглашается на пилот в 20 магазинах. Сэкономленное на оборудовании для магазинов уходит на промежуточное ПО и сервер. Инвесторам покажут результат на меньшей выборке, зато настоящий.',
+        lv: [['ok', 'Бюджет прежний, риск провала ниже.'], ['ok', 'Есть деньги на интеграцию и сервер.'], ['ok', 'Переход затронет 20 магазинов, а не 60.']]
+      }
+    ]
+  },
+  {
+    title: 'Время людей',
+    text: 'Чтобы успеть за три месяца, разработчикам нужно бросить текущие проекты, например обновление касс. Операционный директор против: без них в июне не получится провести инвентаризацию и обновить цены по всей сети. Закупщики просят 30% рабочего времени на работу в двух системах сразу — а это сверхурочные, которых нет в бюджете.',
+    opts: [
+      {
+        label: 'Срок важнее всего: снять трёх разработчиков со всех проектов, обновление касс и подготовку к инвентаризации отложить.',
+        short: 'Все разработчики — только на пилот',
+        type: 'res',
+        scene: 'Система к сроку будет. Но обновление касс встало, а к июньской инвентаризации никто не готовит программы. Операционный директор идёт к генеральному: проект забрал людей, которые нужны всей сети.',
+        lv: [['mid', 'Срок держится, но растёт риск сбоя по всей сети.'], ['ok', 'Есть люди и время на пилот.'], ['bad', 'Кассы и инвентаризация остались без поддержки.']]
+      },
+      {
+        label: 'Собрать ИТ, операционного директора и закупки и договориться о графике: пилот стартует после июньской инвентаризации, закупщикам оплачивают часы работы в двух системах.',
+        short: 'Общий график и оплата двойной работы',
+        type: 'ok',
+        mech: 'диалог «планирование — проверка»',
+        scene: function (s) {
+          return s.small
+            ? 'Руководство приняло сдвиг на месяц: вы пришли с графиком, который устраивает всех. Для 20 магазинов двойной работы немного — сверхурочные оплатили из пересчитанного бюджета.'
+            : 'Руководство приняло сдвиг на месяц. А вот денег на сверхурочные в 50 млн не нашлось: закупщикам оплатили только половину часов.';
+        },
+        lv: function (s) {
+          return [['ok', 'Срок сдвинут на месяц, но по понятному плану.'], ['ok', 'Разработчики успевают и пилот, и инвентаризацию.'],
+            s.small ? ['ok', 'Двойная работа оплачена.'] : ['mid', 'Оплачена только половина двойной работы.']];
+        }
+      },
+      {
+        label: 'Не трогать текущие проекты: ИТ занимается системой по вечерам, после основной работы. Закупщики дублируют заказы вручную в свободное время.',
+        short: 'ИТ — по вечерам, закупщики — в свободное время',
+        type: 'res',
+        scene: 'На бумаге ресурсы не тронули: все проекты идут, бюджет прежний. Но систему настраивают уставшие люди в конце дня, а закупщики сидят над двойными заказами по вечерам без оплаты.',
+        lv: [['ok', 'Сроки и бюджет на бумаге не изменились.'], ['bad', 'Настраивают систему по вечерам, на ходу.'], ['bad', 'Переработки без оплаты.']]
+      }
+    ]
+  },
+  {
+    title: 'Склад',
+    text: 'Первые недели система будет ошибаться, поэтому логисты просят страховой запас ходовых товаров. Директор склада: «Места нет, еле вмещаем текущий товар. Освободить площадь можно, только если закупать меньше, — но тогда потеряем оптовые скидки».',
+    opts: [
+      {
+        label: 'Обойтись без запаса: система должна работать, на ошибки будем реагировать по ходу.',
+        short: 'Без страхового запаса',
+        type: 'res',
+        scene: 'Склад и скидки не тронули. Но если система ошибётся с заказом, закрыть полку будет нечем: от ошибки до пустой полки — один день.',
+        lv: [['ok', 'Скидки и склад сохранены.'], ['mid', 'Каждая ошибка прогноза сразу видна покупателям.'], ['bad', 'Подстраховаться нечем.']]
+      },
+      {
+        label: 'Освободить место под запас по всей сети: на квартал сократить закупки у поставщиков.',
+        short: 'Сократить закупки ради места',
+        type: 'res',
+        scene: 'Место освободили, запас есть. Но несколько поставщиков пересмотрели скидки за объём: закупочные цены выросли, и маржа, которую ждут инвесторы, упала ещё до запуска системы.',
+        lv: [['bad', 'Маржа падает, а её рост и обещали инвесторам.'], ['ok', 'Есть подстраховка на время настройки.'], ['mid', 'Запас есть, но товар обходится дороже.']]
+      },
+      {
+        label: 'Сделать запас только для пилотных магазинов и договориться с поставщиками молочных продуктов о поставках чаще на время перехода.',
+        short: 'Запас для пилота и поставки чаще',
+        type: 'ok',
+        scene: function (s) {
+          return s.small
+            ? 'Для 20 магазинов запас — это несколько палет, место нашлось. Двое поставщиков согласились возить чаще в обмен на прогноз заказов на месяц вперёд.'
+            : 'Для 60 магазинов запас занимает заметную часть склада — пришлось на два месяца арендовать временную площадку. Это незапланированные расходы, зато полки защищены.';
+        },
+        lv: function (s) {
+          return [s.small ? ['ok', 'Скидки сохранены, расходы не выросли.'] : ['mid', 'Появилась незапланированная аренда.'],
+            ['ok', 'Есть время спокойно донастроить систему.'], ['ok', 'Есть запас на первые недели.']];
+        }
+      }
+    ]
+  },
+  {
+    title: 'Первый сбой',
+    text: 'Через два месяца после запуска система не учла сезонный спрос: в пилотных магазинах три дня подряд нет самых ходовых йогуртов. Покупатели жалуются. До встречи с инвесторами — три недели.',
+    opts: [
+      {
+        label: 'Сразу сообщить руководству, что произошло, и предложить: показ инвесторам перенести на месяц, сезонные товары пока заказывать вручную.',
+        short: 'Сообщить наверх и сдвинуть показ',
+        type: 'ok',
+        mech: 'эскалация',
+        scene: function (s) {
+          return (s.stock ? 'Страховой запас закрыл полки в тот же день. ' : 'Закупщики закрыли полки вручную за день. ')
+            + 'Руководство переносит встречу с инвесторами: покажут настоящий результат, а не обещания. У ИТ есть месяц, чтобы научить систему учитывать сезонность.';
+        },
+        lv: [['ok', 'Показ перенесли, но покажут реальный результат.'], ['ok', 'Есть время исправить ошибку.'], ['ok', 'Вручную — только сезонные товары, и ненадолго.']]
+      },
+      {
+        label: 'Не поднимать шум: попросить закупщиков вручную следить за сезонными товарами, пока ИТ ищет ошибку.',
+        short: 'Тихо закрыть вручную',
+        type: 'res',
+        scene: 'Полки заполнили за день. Но руководство о сбое не знает и ждёт отчёта инвесторам по плану. Закупщики работают за двоих — и вручную, и в системе, — и непонятно, сколько это продлится.',
+        lv: [['mid', 'Не знает о сбое, план не меняется.'], ['mid', 'Ищет ошибку, а срок прежний.'], ['bad', 'Новая ручная нагрузка без конца.']]
+      },
+      {
+        label: 'Подготовить отчёт: пилот идёт по плану, отдельные отклонения в пределах нормы, к встрече система будет донастроена.',
+        short: 'Отчёт «всё по плану»',
+        type: 'bureau',
+        scene: 'Отчёт приняли. Через три недели инвесторам показывают рост маржи на слайдах, а в пилотных магазинах сбои продолжаются — теперь с хлебом. Правда всё равно выйдет наружу, только позже и дороже.',
+        lv: [['bad', 'Обещает инвесторам то, чего нет.'], ['bad', 'Времени на исправление нет — срок прежний.'], ['bad', 'Пустые полки повторяются.']]
+      }
+    ]
+  }
+];
+
+var state = { screen: 'intro', i: 0, answers: [] };
+
+/* ─── Вспомогательные ───────────────────────────────────── */
+
+function flags() {
+  var a = state.answers;
+  return {
+    small: a[1] !== undefined && STEPS[1].opts[a[1]].type === 'ok',
+    stock: a[3] !== undefined && STEPS[3].opts[a[3]].type === 'ok'
+  };
+}
+
+function val(x) { return typeof x === 'function' ? x(flags()) : x; }
+
+function answered() { return state.answers[state.i] !== undefined; }
+
+function progressHtml() {
+  return '<div class="progress">'
+    + '<div class="progress__meta">'
+    +   '<span class="progress__label">Решение</span>'
+    +   '<span class="progress__fraction"><em>' + (state.i + 1) + '</em> / ' + STEPS.length + '</span>'
+    + '</div>'
+    + '<div class="progress__track"><div class="progress__fill" style="width:' + (state.i / STEPS.length * 100) + '%"></div></div>'
+    + '</div>';
+}
+
+function optsHtml() {
+  var st = STEPS[state.i], ans = state.answers[state.i];
+  var h = '<div class="opts" id="opts">';
+  for (var k = 0; k < st.opts.length; k++) {
+    var cls = 'card opt';
+    if (ans === undefined) cls += ' card--interactive';
+    else if (k !== ans) cls += ' opt--gone';
+    else cls += ' opt--locked ' + (st.opts[k].type === 'ok' ? 'card--correct' : 'card--wrong');
+    h += '<div class="' + cls + '" data-k="' + k + '"' + (ans === undefined ? ' onclick="pick(' + k + ')"' : '') + '>' + st.opts[k].label + '</div>';
+  }
+  return h + '</div>';
+}
+
+function feedbackHtml() {
+  if (!answered()) return '<div class="hint">Выберите решение — здесь появится, что было дальше.</div>';
+  var o = STEPS[state.i].opts[state.answers[state.i]];
+  var ok = o.type === 'ok';
+  var head = ok ? 'Интересы согласованы' + (o.mech ? ' · ' + o.mech : '') : TYPES[o.type];
+  var lv = val(o.lv), rows = '';
+  for (var k = 0; k < 3; k++) {
+    rows += '<div class="lvl"><span class="dot dot--' + lv[k][0] + '"></span><span><b>' + LV[k] + ':</b> ' + lv[k][1] + '</span></div>';
+  }
+  return '<div class="feedback ' + (ok ? 'feedback--success' : 'feedback--error') + '">'
+    + '<div class="feedback__head">' + head + '</div>'
+    + '<p>' + val(o.scene) + '</p>'
+    + '<div class="levels">' + rows + '</div>'
+    + '</div>';
+}
+
+/* ─── Экраны ────────────────────────────────────────────── */
+
+function renderIntro() {
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body screen__body--center">'
+    +   '<h1 class="page-title">Один пилот<span>и три уровня</span></h1>'
+    +   '<div class="divider"></div>'
+    +   '<p class="lead-text">Сеть продуктовых магазинов «у дома», около 300 точек в регионе. Совет директоров решил сократить списания хлеба, молочных продуктов и овощей и при этом не допускать пустых полок. Для этого внедряют систему прогнозирования спроса на основе искусственного интеллекта — она заменит ручной заказ. Сначала её проверят на пилоте в 60 магазинах.</p>'
+    +   '<p class="lead-text mt-sm">Вас назначили руководителем проекта внедрения. Что вам дали:</p>'
+    +   '<div class="given mt-xs">'
+    +     '<div class="given__item"><div class="given__num">−15%</div><div class="given__txt">списаний — цель совета</div></div>'
+    +     '<div class="given__item"><div class="given__num">50 млн ₽</div><div class="given__txt">на ПО и консультантов — ни рублём больше</div></div>'
+    +     '<div class="given__item"><div class="given__num">3 месяца</div><div class="given__txt">до пилота: инвесторы ждут роста маржи</div></div>'
+    +   '</div>'
+    +   '<p class="lead-text mt-sm">У каждого уровня свои задачи:</p>'
+    +   '<div class="lv-list mt-xs">'
+    +     '<div class="lv-item"><strong>Корпоративный</strong> — совет директоров и генеральный директор: быстро показать результат инвесторам.</div>'
+    +     '<div class="lv-item"><strong>ИТ</strong> — связать новую систему с устаревшей 1С, обучить людей, не сломать текущую работу.</div>'
+    +     '<div class="lv-item"><strong>Закупки и склад</strong> — каждый день держать товар на полках, пока система учится.</div>'
+    +   '</div>'
+    +   '<p class="lead-text mt-sm">Впереди пять решений. После каждого увидите, что было дальше и как это отразилось на каждом уровне. В конце — как всё сложилось в реальной компании.</p>'
+    + '</div>'
+    + '<button class="btn btn--primary btn--full mt-md" onclick="start()">Начать →</button>'
+    + '</div>';
+}
+
+function renderQuestion() {
+  var st = STEPS[state.i];
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body">'
+    +   progressHtml()
+    +   '<div class="card sit mt-sm"><div class="sit__title">' + st.title + '</div><div class="sit__text">' + st.text + '</div></div>'
+    +   '<div class="mt-sm">' + optsHtml() + '</div>'
+    +   '<div id="fbbox" class="fb-zone mt-sm">' + feedbackHtml() + '</div>'
+    + '</div>'
+    + '<div class="nav-bar">'
+    +   '<button id="next-btn" class="btn btn--primary btn--full" onclick="next()"' + (answered() ? '' : ' disabled') + '>'
+    +     (state.i === STEPS.length - 1 ? 'К итогам →' : 'Дальше →')
+    +   '</button>'
+    + '</div>'
+    + '</div>';
+}
+
+function renderPath() {
+  var okN = 0, seen = {}, rows = '', signs = '';
+  for (var k = 0; k < STEPS.length; k++) {
+    var o = STEPS[k].opts[state.answers[k]];
+    var ok = o.type === 'ok';
+    if (ok) okN++; else seen[o.type] = true;
+    rows += '<div class="path__row"><span class="dot dot--' + (ok ? 'ok' : 'bad') + '"></span>'
+      + '<div class="path__main"><div class="path__step">' + (k + 1) + ' · ' + STEPS[k].title + '</div>'
+      + '<div class="path__choice">' + o.short + '</div></div>'
+      + '<div class="path__tag">' + (ok ? 'согласовано' : TYPES[o.type].toLowerCase()) + '</div></div>';
+  }
+  for (var t in TYPES) if (seen[t]) signs += '<span class="badge badge--error">' + TYPES[t] + '</span>';
+
+  var title, lead;
+  if (okN === STEPS.length) {
+    title = 'Уровни договорились';
+    lead = 'На каждой развилке вы искали решение, которое не перекладывает проблему с одного уровня на другой. Сбои в пилоте были, но о них знали и их исправляли.';
+  } else if (okN >= 3) {
+    title = 'Согласованность с пробелами';
+    lead = 'Часть решений связала интересы уровней, а часть переложила проблему на соседей. Ниже видно, где именно.';
+  } else {
+    title = 'Каждый уровень сам за себя';
+    lead = 'Почти каждое решение было удобно одному уровню и переносило проблему на другой. Реальная компания прошла примерно этим путём.';
+  }
+
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body screen__body--center">'
+    +   '<h2 class="section-title">' + title + '</h2>'
+    +   '<div class="divider"></div>'
+    +   '<p class="lead-text">' + lead + '</p>'
+    +   '<div class="path mt-sm">' + rows + '</div>'
+    +   (signs ? '<p class="real__head mt-sm">Что проявилось на вашем пути:</p><div class="signs mt-xs">' + signs + '</div>' : '')
+    + '</div>'
+    + '<button class="btn btn--primary btn--full mt-md" onclick="go(\'real\')">Как было на самом деле →</button>'
+    + '</div>';
+}
+
+function renderReal() {
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body screen__body--center">'
+    +   '<h2 class="section-title">Как было на самом деле</h2>'
+    +   '<div class="divider"></div>'
+    +   '<p class="lead-text">В реальной компании ресурсы поделили так, чтобы никому не отказать совсем:</p>'
+    +   '<ul class="real mt-xs">'
+    +     '<li>50 млн дали на ПО и консультантов, ещё 15 млн на доработки и инфраструктуру — нет;</li>'
+    +     '<li>ИТ-команда работала над проектом только по вечерам, после основной работы;</li>'
+    +     '<li>страховой запас на складе не создавали;</li>'
+    +     '<li>закупщикам разрешили дублировать заказы вручную в свободное время.</li>'
+    +   '</ul>'
+    +   '<p class="real__head mt-sm">Через два месяца:</p>'
+    +   '<ul class="real mt-xs">'
+    +     '<li>система давала сбои на 20% товарных позиций — на настройку не хватило времени;</li>'
+    +     '<li>в пилотных магазинах три дня не было ходовых йогуртов, выручка этих точек упала на 30%;</li>'
+    +     '<li>один закупщик уволился от переработок, заменить его было некем;</li>'
+    +     '<li>обновление касс забросили — в двух магазинах зависли терминалы и выросли очереди.</li>'
+    +   '</ul>'
+    +   '<div class="legend-box">'
+    +     '<span class="legend-tag">Главное</span>'
+    +     'Каждый уровень боролся за свою долю — деньги, время людей, место на складе, — и никто не свёл эти запросы в общий баланс. '
+    +     'Затраты на внедрение выросли, списания почти не изменились, а товара на полках стало меньше. <strong>Операционная эффективность упала, а не выросла.</strong>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="nav-bar mt-sm">'
+    +   '<button class="btn btn--secondary" onclick="go(\'path\')">← Мой путь</button>'
+    +   '<button class="btn btn--primary" onclick="restart()">Пройти заново</button>'
+    + '</div>'
+    + '</div>';
+}
+
+/* ─── Управление ────────────────────────────────────────── */
+
+function render() {
+  var h = '';
+  if (state.screen === 'intro') h = renderIntro();
+  else if (state.screen === 'q') h = renderQuestion();
+  else if (state.screen === 'path') h = renderPath();
+  else h = renderReal();
+  document.getElementById('app').innerHTML = h;
+  notifyHeight();
+}
+
+function start() {
+  state.screen = 'q';
+  state.i = 0;
+  state.answers = [];
+  render();
+}
+
+/* Выбор обновляет блоки на месте: остальные варианты прячутся,
+   высота экрана не меняется за счёт min-height */
+function pick(k) {
+  if (answered()) return;
+  state.answers[state.i] = k;
+  document.querySelector('#opts').outerHTML = optsHtml();
+  document.getElementById('fbbox').innerHTML = feedbackHtml();
+  document.getElementById('next-btn').disabled = false;
+  notifyHeight();
+}
+
+function next() {
+  if (state.i === STEPS.length - 1) state.screen = 'path';
+  else state.i++;
+  render();
+}
+
+function go(screen) {
+  state.screen = screen;
+  render();
+}
+
+function restart() {
+  state.screen = 'intro';
+  state.i = 0;
+  state.answers = [];
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
