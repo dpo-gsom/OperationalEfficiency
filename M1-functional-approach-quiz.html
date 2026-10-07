@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Функциональный подход</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* ─── Экран: фиксированная высота, чтобы iframe не прыгал ─── */
+  .screen { min-height: 600px; }
+  .screen__body { flex: 1; display: flex; flex-direction: column; }
+
+  /* ─── Вопрос и варианты ─── */
+  .q-card { padding: 16px 18px; }
+  .options { display: flex; flex-direction: column; gap: 8px; }
+  .opt {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--dark);
+  }
+  .opt__mark {
+    flex-shrink: 0;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    color: var(--white);
+  }
+  .opt--locked { cursor: default; pointer-events: none; }
+  .card--correct .opt__mark { background: var(--green); border-color: var(--green); }
+  .card--wrong .opt__mark { background: var(--red); border-color: var(--red); }
+
+  /* ─── Зона разбора под вариантами ─── */
+  .fb-zone { min-height: 120px; }
+  .fb-zone .hint {
+    font-size: 13px;
+    color: var(--slate);
+    text-align: center;
+    padding: 18px 10px;
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius-md);
+  }
+
+  /* ─── Итоги ─── */
+  .topics { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; }
+  .topic { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 1.35; color: var(--slate); }
+  .topic__mark {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: var(--white);
+    background: var(--green);
+  }
+  .topic--miss .topic__mark { background: var(--red); }
+  .topic--miss { color: var(--dark); font-weight: 600; }
+  .summary { font-size: 14px; line-height: 1.65; color: var(--slate); }
+  .summary b { color: var(--dark); }
+
+  @media (max-width: 560px) {
+    .screen { min-height: 790px; }
+    .topics { grid-template-columns: 1fr; }
+    .fb-zone { min-height: 150px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script src="common.js"></script>
+<script>
+/* =========================================================
+   Функциональный подход: квиз на 10 вопросов
+   Модуль 1 · один верный вариант и два правдоподобных неверных,
+   разбор под вариантами, варианты перемешиваются при каждом прохождении
+   ========================================================= */
+
+var QUESTIONS = [
+  {
+    topic: 'Принцип деления на отделы',
+    q: 'Компания перестраивает структуру. Какой вариант соответствует функциональному подходу?',
+    right: 'Отделы маркетинга, финансов, производства и HR, каждый работает на всю компанию',
+    explain: 'Функциональный подход делит компанию по виду работы: маркетологи в одном отделе, финансисты в другом, и каждый отдел обслуживает всю компанию.',
+    wrong: [
+      { text: 'Подразделения «Детская обувь», «Спортивная обувь» и «Классическая обувь», в каждом свои маркетологи и финансисты',
+        why: 'Здесь компания разделена по продуктам, и в каждом направлении свои специалисты. При функциональном подходе специалисты одного профиля собраны в одном отделе.' },
+      { text: 'Под каждый крупный заказ собирается команда из нужных специалистов, после сдачи заказа она расходится',
+        why: 'Это временные команды под конкретный результат. При функциональном подходе отделы постоянные и собраны по виду работы.' }
+    ]
+  },
+  {
+    topic: 'Где подход оказался эффективен',
+    q: 'Для какой работы функциональный подход оказался особенно эффективным в начале XX века?',
+    right: 'Выпуск одинаковых автомобилей большими партиями на конвейере',
+    explain: 'Подход вырос из массового производства. Строгое разделение труда, стандарты и специализация лучше всего работают, когда изделия одинаковые и их много.',
+    wrong: [
+      { text: 'Сборка автомобилей по индивидуальным заказам, каждый под конкретного клиента',
+        why: 'Каждый заказ под клиента — это постоянные отличия и согласования. Сила функционального подхода в стандартизации, а она нужна, когда изделия одинаковые и их много.' },
+      { text: 'Разработка новой модели, когда заранее неизвестно, что получится',
+        why: 'Когда результат неизвестен, работу нельзя заранее разложить по стандартам и участкам. Подход создавался для массового выпуска одинаковых изделий.' }
+    ]
+  },
+  {
+    topic: 'Экономия на масштабе',
+    q: 'В компании пять продуктовых направлений. Бухгалтерию для всех ведёт один общий отдел, а не отдельный бухгалтер в каждом направлении. Что компания выигрывает от того, что отдел один, а не пять?',
+    right: 'Не нужно держать одних и тех же специалистов в каждом направлении',
+    explain: 'Функции не дублируются: один отдел обслуживает все направления, и компании не нужно держать бухгалтера в каждом. Это экономия на масштабе.',
+    wrong: [
+      { text: 'Бухгалтеры лучше понимают особенности каждого направления',
+        why: 'Скорее наоборот: общий отдел дальше от каждого направления, чем свой бухгалтер. Выигрыш в другом: функции не дублируются.' },
+      { text: 'Один руководитель отдела отвечает за финансовый результат всех направлений',
+        why: 'Руководитель бухгалтерии отвечает за работу бухгалтерии, а не за результат направлений. Выигрыш в том, что функции не дублируются.' }
+    ]
+  },
+  {
+    topic: 'Единоначалие',
+    q: 'Дизайнер работает в компании с функциональной структурой. Кто его руководитель?',
+    right: 'Арт-директор, руководитель дизайнеров',
+    explain: 'Действует единоначалие: у сотрудника один руководитель — руководитель его функции. Арт-директор сам разбирается в дизайне, поэтому ему проще оценивать работу дизайнера.',
+    wrong: [
+      { text: 'Руководитель каждого проекта, в котором он участвует',
+        why: 'Дизайнер остаётся в своём отделе, и руководители проектов им не управляют. Его руководитель — арт-директор.' },
+      { text: 'Одновременно арт-директор и руководитель проекта',
+        why: 'Два руководителя нарушают единоначалие, на котором стоит функциональный подход. У дизайнера один руководитель — арт-директор.' }
+    ]
+  },
+  {
+    topic: 'Когда подход работает лучше всего',
+    q: 'В какой компании функциональный подход подойдёт лучше всего?',
+    right: 'Производитель с небольшим ассортиментом и устоявшимися процессами',
+    explain: 'Функциональный подход сильнее всего там, где задачи предсказуемы, ассортимент небольшой, а процессы устоялись. Тогда специализация и стандарты дают максимум качества при низких издержках.',
+    wrong: [
+      { text: 'Компания, которая каждые полгода выводит новые продукты на новые рынки',
+        why: 'Частые перемены требуют быстрых решений, а при функциональном подходе они проходят длинную цепочку согласований. Подходу нужна стабильная среда.' },
+      { text: 'Компания, где большая часть работы — общие проекты нескольких отделов с жёсткими сроками',
+        why: 'Общие проекты нескольких отделов — слабое место подхода: непонятно, кто отвечает за результат, а сроки проекта спорят с планами отделов.' }
+    ]
+  },
+  {
+    topic: 'Разный профессиональный язык',
+    q: 'Маркетинг просит «сделать продукт премиальнее». Инженеры решают, что нужны дорогие материалы, а финансисты — что нужно поднять цену. Какой это недостаток функционального подхода?',
+    right: 'Разный профессиональный язык',
+    explain: 'Каждый отдел понял одну и ту же задачу по-своему, на языке своей профессии. Это и есть разный профессиональный язык.',
+    wrong: [
+      { text: 'Борьба отделов за ресурсы',
+        why: 'Отделы здесь не спорят о бюджете или людях, они по-разному поняли одну задачу. Это разный профессиональный язык.' },
+      { text: 'Медленное реагирование на изменения',
+        why: 'Задержки с решением здесь нет. Проблема в том, что одну задачу поняли по-разному, — это разный профессиональный язык.' }
+    ]
+  },
+  {
+    topic: 'Свои цели выше общих',
+    q: 'Отдел продаж выполнил план, пообещав клиентам сроки, которые производство выдержать не может. Какой это недостаток?',
+    right: 'Свои показатели ставятся выше общей цели компании',
+    explain: 'Отдел выполнил свой план ценой общего результата: клиенты получат сорванные сроки. Это фокус на целях своей функции вместо общей цели компании.',
+    wrong: [
+      { text: 'Медленное реагирование на изменения',
+        why: 'Отдел продаж, наоборот, действовал быстро. Проблема в том, что он гнался за своим планом и не учёл возможности производства.' },
+      { text: 'Разный профессиональный язык',
+        why: 'Здесь никто не понял задачу по-другому. Отдел продаж выполнял свой план и не учёл возможности производства — это фокус на своих целях.' }
+    ]
+  },
+  {
+    topic: 'Медленное реагирование',
+    q: 'Клиент попросил изменить упаковку. Решение три недели переходило от одного руководителя отдела к другому. Какой это недостаток?',
+    right: 'Медленное реагирование: длинная цепочка согласований',
+    explain: 'Простое решение прошло через нескольких руководителей отделов. Длинная цепочка согласований — типичная причина медленной реакции на изменения.',
+    wrong: [
+      { text: 'Несогласованность сроков проекта и планов отделов',
+        why: 'Здесь нет проекта, сроки которого спорят с планами отделов. Решение просто долго шло по цепочке согласований.' },
+      { text: 'Борьба отделов за ресурсы',
+        why: 'Отделы не делят бюджет или людей. Решение просто долго шло от одного руководителя к другому.' }
+    ]
+  },
+  {
+    topic: '«Ничья зона» в общих проектах',
+    q: 'Над запуском нового продукта работают маркетинг, производство и финансы. Сроки сорваны, но каждый отдел говорит, что свою часть сделал. Кто из них отвечает за общий результат проекта?',
+    right: 'Никто: общий результат оказывается «ничьей зоной»',
+    explain: 'Каждый отдел отвечает за свой участок, а за проект целиком — никто. У проекта нет единого лидера, а у руководителей отделов нет полномочий друг над другом.',
+    wrong: [
+      { text: 'Маркетинг, потому что он предложил запуск',
+        why: 'Предложить запуск не значит за него отвечать. У маркетинга нет полномочий над производством и финансами, поэтому за общий результат не отвечает никто.' },
+      { text: 'Отдел, у которого в проекте больше всего задач',
+        why: 'Объём задач не даёт полномочий над другими отделами. Каждый отвечает за свой участок, а общий результат остаётся ничьим.' }
+    ]
+  },
+  {
+    topic: 'Сочетание с другими подходами',
+    q: 'Как современные компании справляются с ограничениями функционального подхода?',
+    right: 'Сохраняют функциональную основу и добавляют к ней процессный или проектный подход',
+    explain: 'Функциональная основа сохраняет специализацию и экономию, а процессный или проектный подход закрывает слабые места: координацию между отделами и ответственность за общий результат.',
+    wrong: [
+      { text: 'Полностью отказываются от функциональных отделов',
+        why: 'Так компания потеряет сильные стороны подхода: специализацию, экономию на масштабе, понятный карьерный рост. Функциональную основу сохраняют и дополняют другими подходами.' },
+      { text: 'Усиливают контроль внутри каждого отдела',
+        why: 'Контроль внутри отдела и так сильная сторона подхода. Слабые места находятся между отделами, и их закрывают процессным или проектным подходом.' }
+    ]
+  }
+];
+
+/* state.orders[i] — порядок вариантов: 0 — верный, 1 и 2 — неверные */
+var state = { screen: 'intro', i: 0, answers: [], orders: [] };
+
+function shuffle(arr) {
+  for (var k = arr.length - 1; k > 0; k--) {
+    var j = Math.floor(Math.random() * (k + 1));
+    var t = arr[k]; arr[k] = arr[j]; arr[j] = t;
+  }
+  return arr;
+}
+
+function optText(q, idx) { return idx === 0 ? q.right : q.wrong[idx - 1].text; }
+
+function answered() {
+  var a = state.answers[state.i];
+  return a !== undefined && a !== null;
+}
+
+/* ─── Варианты ──────────────────────────────────────────── */
+
+function lockedOptClass(idx, ans) {
+  var cls = 'card opt opt--locked';
+  if (idx === 0) cls += ' card--correct';
+  else if (idx === ans) cls += ' card--wrong';
+  else cls += ' card--dimmed';
+  return cls;
+}
+
+function markFor(idx, ans) {
+  if (idx === 0) return '✓';
+  if (idx === ans) return '✕';
+  return '';
+}
+
+function optionsHtml() {
+  var q = QUESTIONS[state.i];
+  var order = state.orders[state.i];
+  var ans = state.answers[state.i];
+  var h = '<div class="options">';
+  for (var k = 0; k < order.length; k++) {
+    var idx = order[k];
+    if (answered()) {
+      h += '<div class="' + lockedOptClass(idx, ans) + '" data-opt="' + idx + '"><span class="opt__mark">' + markFor(idx, ans) + '</span><span>' + optText(q, idx) + '</span></div>';
+    } else {
+      h += '<div class="card card--interactive opt" data-opt="' + idx + '" onclick="pick(' + idx + ')"><span class="opt__mark"></span><span>' + optText(q, idx) + '</span></div>';
+    }
+  }
+  return h + '</div>';
+}
+
+/* ─── Разбор ────────────────────────────────────────────── */
+
+function feedbackHtml() {
+  if (!answered()) {
+    return '<div class="hint">Выберите вариант — здесь появится разбор.</div>';
+  }
+  var q = QUESTIONS[state.i];
+  var ans = state.answers[state.i];
+  if (ans === 0) {
+    return '<div class="feedback feedback--success">'
+      + '<div class="feedback__head">Верно · ' + q.topic.toLowerCase() + '</div>'
+      + q.explain
+      + '</div>';
+  }
+  return '<div class="feedback feedback--error">'
+    + '<div class="feedback__head">Неверно · правильно: ' + q.right.charAt(0).toLowerCase() + q.right.slice(1) + '</div>'
+    + q.wrong[ans - 1].why
+    + '</div>';
+}
+
+function progressHtml() {
+  return '<div class="progress">'
+    + '<div class="progress__meta">'
+    +   '<span class="progress__label">Вопрос</span>'
+    +   '<span class="progress__fraction"><em>' + (state.i + 1) + '</em> / ' + QUESTIONS.length + '</span>'
+    + '</div>'
+    + '<div class="progress__track"><div class="progress__fill" style="width:' + (state.i / QUESTIONS.length * 100) + '%"></div></div>'
+    + '</div>';
+}
+
+/* ─── Экраны ────────────────────────────────────────────── */
+
+function renderIntro() {
+  return '<div class="screen__body" style="justify-content:center">'
+    +   '<h1 class="page-title">Функциональный<span>подход</span></h1>'
+    +   '<div class="divider"></div>'
+    +   '<p class="lead-text">Десять вопросов о том, как устроен функциональный подход, в чём его сила и где он даёт сбой.</p>'
+    +   '<p class="lead-text mt-sm">В каждом вопросе один верный ответ. После выбора появится короткий разбор.</p>'
+    + '</div>'
+    + '<button class="btn btn--primary btn--full mt-md" onclick="start()">Начать →</button>';
+}
+
+function renderQuestion() {
+  var q = QUESTIONS[state.i];
+  return '<div class="screen__body">'
+    +   progressHtml()
+    +   '<div class="card q-card mt-xs"><div class="question-text">' + q.q + '</div></div>'
+    +   '<div id="optbox" class="mt-sm">' + optionsHtml() + '</div>'
+    +   '<div id="fbbox" class="fb-zone mt-sm">' + feedbackHtml() + '</div>'
+    + '</div>'
+    + '<div class="nav-bar">'
+    +   '<button id="next-btn" class="btn btn--primary btn--full" onclick="next()"' + (answered() ? '' : ' disabled') + '>'
+    +     (state.i === QUESTIONS.length - 1 ? 'К итогам →' : 'Далее →')
+    +   '</button>'
+    + '</div>';
+}
+
+function renderFinal() {
+  var items = '';
+  var missed = [];
+  for (var n = 0; n < QUESTIONS.length; n++) {
+    var hit = (state.answers[n] === 0);
+    if (!hit) missed.push(QUESTIONS[n].topic.toLowerCase());
+    items += '<div class="topic' + (hit ? '' : ' topic--miss') + '"><span class="topic__mark">' + (hit ? '✓' : '✕') + '</span>' + QUESTIONS[n].topic + '</div>';
+  }
+  var summary;
+  if (missed.length === 0) {
+    summary = 'Вы уверенно различаете, как устроен функциональный подход, в чём его сила и где его слабые места.';
+  } else if (missed.length <= 3) {
+    summary = 'Основное вы различаете уверенно. Стоит ещё раз перечитать: <b>' + missed.join(', ') + '</b>.';
+  } else {
+    summary = 'Стоит вернуться к материалу страницы. Темы, где ответ разошёлся с верным, отмечены красным.';
+  }
+  return '<div class="screen__body">'
+    +   '<h2 class="section-title">Итоги</h2>'
+    +   '<div class="divider"></div>'
+    +   '<div class="topics">' + items + '</div>'
+    +   '<p class="summary mt-md">' + summary + '</p>'
+    +   '<div class="legend-box">'
+    +     '<span class="legend-tag">Главное</span>'
+    +     'Сила функционального подхода — <strong>специализация и внутренняя эффективность</strong>. Слабое место — всё, что происходит между отделами. Поэтому его используют как основу и дополняют процессным или проектным подходом.'
+    +   '</div>'
+    + '</div>'
+    + '<button class="btn btn--secondary btn--full" onclick="restart()">Пройти заново</button>';
+}
+
+/* ─── Управление ────────────────────────────────────────── */
+
+function render() {
+  var body;
+  if (state.screen === 'intro') body = renderIntro();
+  else if (state.screen === 'q') body = renderQuestion();
+  else body = renderFinal();
+  document.getElementById('app').innerHTML = '<div class="page-wrap--compact screen anim-fade-up">' + body + '</div>';
+  notifyHeight();
+}
+
+function start() {
+  state.screen = 'q';
+  state.i = 0;
+  state.answers = [];
+  state.orders = [];
+  for (var n = 0; n < QUESTIONS.length; n++) state.orders.push(shuffle([0, 1, 2]));
+  render();
+}
+
+/* Выбор обновляет варианты и разбор на месте: экран не вздрагивает */
+function pick(idx) {
+  if (answered()) return;
+  state.answers[state.i] = idx;
+  var opts = document.querySelectorAll('#optbox [data-opt]');
+  for (var k = 0; k < opts.length; k++) {
+    var o = +opts[k].getAttribute('data-opt');
+    opts[k].className = lockedOptClass(o, idx);
+    opts[k].onclick = null;
+    opts[k].querySelector('.opt__mark').textContent = markFor(o, idx);
+  }
+  document.getElementById('fbbox').innerHTML = feedbackHtml();
+  document.getElementById('next-btn').disabled = false;
+  notifyHeight();
+}
+
+function next() {
+  if (state.i === QUESTIONS.length - 1) state.screen = 'final';
+  else state.i++;
+  render();
+}
+
+function restart() {
+  state.screen = 'intro';
+  state.i = 0;
+  state.answers = [];
+  state.orders = [];
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
