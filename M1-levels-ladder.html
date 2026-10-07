@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Одна цель — четыре уровня</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* ─── Экран: фиксированная высота, чтобы iframe не прыгал ─── */
+  .screen { min-height: 754px; }
+  .screen__body { flex: 1; display: flex; flex-direction: column; }
+  .screen__body--center { justify-content: center; }
+
+  /* ─── Карточка действия ─── */
+  .case-card { min-height: 92px; display: flex; align-items: center; }
+
+  /* ─── Лестница уровней ─── */
+  .ladder { display: flex; flex-direction: column; gap: 6px; }
+
+  .tier {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    border-left: 4px solid var(--dark);
+    border-radius: var(--radius-md);
+    transition: background .15s, border-color .15s, box-shadow .15s;
+  }
+  .tier:nth-child(2) { margin-left: 14px; border-left-color: var(--slate); }
+  .tier:nth-child(3) { margin-left: 28px; border-left-color: var(--amber); }
+  .tier:nth-child(4) { margin-left: 42px; border-left-color: var(--red); }
+
+  .tier__head { flex: 0 0 170px; }
+  .tier__name { font-size: 14px; font-weight: 700; color: var(--dark); line-height: 1.25; }
+  .tier__scope { font-size: 12px; color: var(--slate); line-height: 1.3; }
+
+  .tier__slots {
+    flex: 1;
+    min-width: 0;
+    min-height: 50px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+  }
+  .tier__people { font-size: 13px; color: var(--slate); line-height: 1.4; }
+
+  .tier--btn { cursor: pointer; }
+  .tier--btn:hover { background: var(--sand); box-shadow: 0 2px 8px rgba(0, 59, 72, .08); }
+  .tier--right { background: var(--green-bg); border-color: var(--green-border); }
+  .tier--wrong { background: var(--red-bg); border-color: var(--red-border); }
+  .tier--right, .tier--wrong { border-left-width: 4px; }
+
+  .chip {
+    font-size: 12px;
+    line-height: 1.3;
+    color: var(--dark);
+    padding: 3px 8px;
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .chip--miss { border-color: var(--red-border); background: var(--red-bg); }
+  .chip--new { animation: fadeUp .35s ease both; }
+
+  /* ─── Зона обратной связи ─── */
+  .fb-zone { min-height: 150px; display: flex; flex-direction: column; }
+  .fb-zone p + p { margin-top: 7px; }
+  .fb-zone .hint {
+    font-size: 13px;
+    color: var(--slate);
+    text-align: center;
+    padding: 18px 10px;
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius-md);
+  }
+
+  @media (max-width: 560px) {
+    .tier { flex-direction: column; align-items: stretch; gap: 5px; padding: 8px 10px; }
+    .tier:nth-child(2) { margin-left: 6px; }
+    .tier:nth-child(3) { margin-left: 12px; }
+    .tier:nth-child(4) { margin-left: 18px; }
+    .tier__head { flex: none; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+    .tier__scope::before { content: '· '; }
+    .tier__slots { min-height: 48px; }
+    .tier__slots--intro { min-height: 0; }
+    .case-card { min-height: 0; }
+    .fb-zone { min-height: 196px; }
+    .screen { min-height: 867px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script src="common.js"></script>
+<script>
+/* =========================================================
+   Одна цель — четыре уровня
+   Мебельная фабрика: срок заказа с 21 до 14 дней.
+   Восемь действий без должностей — поставить каждое на свою ступень.
+   Без подсчёта очков: в итоге — собранная лестница
+   ========================================================= */
+
+var LEVELS = [
+  { name: 'Топ-уровень',  scope: 'вся компания',         people: 'Собственники и генеральный директор' },
+  { name: 'Средний',      scope: 'функция',              people: 'Директора по производству, продажам, логистике' },
+  { name: 'Линейный',     scope: 'участок, команда',     people: 'Мастера участков и начальники смен' },
+  { name: 'Исполнители',  scope: 'своё рабочее место',   people: 'Раскройщики, маляры, сборщики, кладовщики' }
+];
+
+var CASES = [
+  {
+    text: 'Разложили 14 дней по этапам: раскрой — 3 дня, покраска — 4, сборка — 5, упаковка и отгрузка — 2. Каждый цех получил свою цифру.',
+    short: '14 дней разложили по этапам',
+    a: 1,
+    who: 'Это сделал директор по производству.',
+    why: 'Он перевёл цель компании на язык своей функции: сколько дней у каждого цеха. Мастер получает уже готовую цифру для своего участка и думает, как в неё уложиться.'
+  },
+  {
+    text: 'Увидели, что на сборке заказы копятся у одного станка, и перевели к нему двух человек во вторую смену.',
+    short: 'Двое людей к загруженному станку',
+    a: 2,
+    who: 'Это сделал мастер участка сборки.',
+    why: 'Узкое место на своём участке и люди своей смены — его зона. Директору этот станок не виден, а сборщик не может сам перевести коллег в другую смену.'
+  },
+  {
+    text: 'Заметили, что за смену 20 минут уходит на поиск инструмента, и предложили повесить у верстака щит с контурами инструментов.',
+    short: 'Щит для инструментов у верстака',
+    a: 3,
+    who: 'Это предложил сборщик.',
+    why: 'Он заметил потерю времени на своём рабочем месте и предложил, как её убрать. Это инициатива снизу вверх: решать будет мастер, но проблему увидел тот, кто работает у верстака.'
+  },
+  {
+    text: 'Сделали срок 14 дней главной целью года. Вместо трёх отделов, которые передают заказ друг другу, назначили одного ответственного за весь путь заказа — от продажи до отгрузки.',
+    short: 'Цель года и один ответственный за заказ',
+    a: 0,
+    who: 'Это решил генеральный директор.',
+    why: 'Цель для всей компании и новая схема, кто за что отвечает, — это стратегия и оргструктура. Директор одной функции так сделать не может: соседние отделы ему не подчиняются.'
+  },
+  {
+    text: 'Сравнили сроки по цехам с данными отдела продаж и нашли причину задержек: срочные заказы ставят вне очереди.',
+    short: 'Сроки цехов против данных продаж',
+    a: 1,
+    who: 'Это сделал директор по производству вместе с директором по продажам.',
+    why: 'Мастер тоже работает с цифрами, но своего участка. Сравнить все цеха с данными соседней функции может только тот, кто отвечает за функцию целиком.'
+  },
+  {
+    text: 'Перед упаковкой каждого шкафа прошли чек-лист из шести пунктов и сами отметили, что всё проверено.',
+    short: 'Чек-лист перед упаковкой',
+    a: 3,
+    who: 'Это делают сборщики.',
+    why: 'Работать по чек-листу и проверять себя — задача исполнителя на своём рабочем месте. Составить чек-лист может мастер, но проходят его те, кто собирает шкаф.'
+  },
+  {
+    text: 'Договорились со складом выдавать фурнитуру утром одним комплектом на смену, а не по заявке на каждый заказ: сборщики ждали её по полчаса.',
+    short: 'Фурнитура одним комплектом на смену',
+    a: 2,
+    who: 'Это сделал мастер участка сборки.',
+    why: 'Он убрал лишнюю процедуру на своём участке — это борьба с микро-бюрократией. Перестраивать всё снабжение не понадобилось, хватило договориться со складом.'
+  },
+  {
+    text: 'Решили построить свой склад рядом с цехом вместо арендованного на другом конце города.',
+    short: 'Свой склад рядом с цехом',
+    a: 0,
+    who: 'Это решили собственники и генеральный директор.',
+    why: 'Склад — это инфраструктура: большие деньги и решение на годы вперёд. Директор по логистике может его предложить и посчитать, но решают наверху.'
+  }
+];
+
+var state = { screen: 'intro', i: 0, answers: [] };
+
+/* ─── Вспомогательные ───────────────────────────────────── */
+
+function answered(k) {
+  return state.answers[k] !== null && state.answers[k] !== undefined;
+}
+
+/* Ярлыки уже разобранных действий: всегда на правильной ступени,
+   красная рамка — если ученик поставил действие на другую */
+function chipsHtml(lv, upto, fresh) {
+  var h = '';
+  for (var k = 0; k <= upto; k++) {
+    if (CASES[k].a !== lv || !answered(k)) continue;
+    var cls = 'chip';
+    if (state.answers[k] !== CASES[k].a) cls += ' chip--miss';
+    if (k === fresh) cls += ' chip--new';
+    h += '<div class="' + cls + '">' + CASES[k].short + '</div>';
+  }
+  return h;
+}
+
+function tierHead(lv) {
+  return '<div class="tier__head">'
+    + '<div class="tier__name">' + LEVELS[lv].name + '</div>'
+    + '<div class="tier__scope">' + LEVELS[lv].scope + '</div>'
+    + '</div>';
+}
+
+function ladderHtml(mode) {
+  var h = '<div class="ladder" id="ladder">';
+  for (var lv = 0; lv < LEVELS.length; lv++) {
+    if (mode === 'intro') {
+      h += '<div class="tier">' + tierHead(lv)
+        + '<div class="tier__slots tier__slots--intro"><div class="tier__people">' + LEVELS[lv].people + '</div></div></div>';
+    } else if (mode === 'q') {
+      var ans = state.answers[state.i];
+      var cls = 'tier';
+      if (!answered(state.i)) cls += ' tier--btn';
+      else if (lv === CASES[state.i].a) cls += ' tier--right';
+      else if (lv === ans) cls += ' tier--wrong';
+      h += '<div class="' + cls + '" data-lv="' + lv + '"' + (answered(state.i) ? '' : ' onclick="pick(' + lv + ')"') + '>'
+        + tierHead(lv)
+        + '<div class="tier__slots">' + chipsHtml(lv, state.i, -1) + '</div></div>';
+    } else {
+      h += '<div class="tier">' + tierHead(lv)
+        + '<div class="tier__slots">' + chipsHtml(lv, CASES.length - 1, -1) + '</div></div>';
+    }
+  }
+  return h + '</div>';
+}
+
+function progressHtml() {
+  return '<div class="progress">'
+    + '<div class="progress__meta">'
+    +   '<span class="progress__label">Действие</span>'
+    +   '<span class="progress__fraction"><em>' + (state.i + 1) + '</em> / ' + CASES.length + '</span>'
+    + '</div>'
+    + '<div class="progress__track"><div class="progress__fill" style="width:' + (state.i / CASES.length * 100) + '%"></div></div>'
+    + '</div>';
+}
+
+function feedbackHtml() {
+  if (!answered(state.i)) {
+    return '<div class="hint">Нажмите на ступень — здесь появится разбор.</div>';
+  }
+  var c = CASES[state.i];
+  var right = (state.answers[state.i] === c.a);
+  return '<div class="feedback ' + (right ? 'feedback--success' : 'feedback--error') + '">'
+    + '<div class="feedback__head">' + (right ? 'Верно · ' : 'Неверно · ') + LEVELS[c.a].name
+    + (c.a === 0 || c.a === 3 ? '' : ' уровень') + '</div>'
+    + '<p><strong>' + c.who + '</strong> ' + c.why + '</p>'
+    + '</div>';
+}
+
+/* ─── Экраны ────────────────────────────────────────────── */
+
+function renderIntro() {
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body screen__body--center">'
+    +   '<h1 class="page-title">Одна цель<span>на четырёх уровнях</span></h1>'
+    +   '<div class="divider"></div>'
+    +   '<p class="lead-text">Мебельная фабрика: три цеха, свой отдел продаж и склад. Заказ клиента сейчас выполняют за 21 день, а нужно — за 14. Над этим работают все четыре уровня управления:</p>'
+    +   '<div class="mt-sm">' + ladderHtml('intro') + '</div>'
+    +   '<p class="lead-text mt-sm">Дальше — восемь действий, которые сделали на фабрике. Кто их сделал, не сказано. Определите уровень по масштабу: на что влияет это действие.</p>'
+    + '</div>'
+    + '<button class="btn btn--primary btn--full mt-md" onclick="start()">Начать →</button>'
+    + '</div>';
+}
+
+function renderQuestion() {
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body">'
+    +   progressHtml()
+    +   '<div class="card case-card mt-sm"><p class="question-text">' + CASES[state.i].text + '</p></div>'
+    +   '<div id="ladderbox" class="mt-sm">' + ladderHtml('q') + '</div>'
+    +   '<div id="fbbox" class="fb-zone mt-sm">' + feedbackHtml() + '</div>'
+    + '</div>'
+    + '<div class="nav-bar">'
+    +   '<button id="next-btn" class="btn btn--primary btn--full" onclick="next()"' + (answered(state.i) ? '' : ' disabled') + '>'
+    +     (state.i === CASES.length - 1 ? 'К итогам →' : 'Далее →')
+    +   '</button>'
+    + '</div>'
+    + '</div>';
+}
+
+function renderResult() {
+  var miss = 0;
+  for (var k = 0; k < CASES.length; k++) if (state.answers[k] !== CASES[k].a) miss++;
+  var lead = miss === 0
+    ? 'Все восемь действий стоят на своих ступенях. Так цель «14 дней вместо 21» разошлась по фабрике:'
+    : 'Так цель «14 дней вместо 21» разошлась по фабрике. Красным отмечено то, что вы поставили на другую ступень:';
+
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body screen__body--center">'
+    +   '<h2 class="section-title">Лестница собрана</h2>'
+    +   '<div class="divider"></div>'
+    +   '<p class="lead-text">' + lead + '</p>'
+    +   '<div class="mt-sm">' + ladderHtml('result') + '</div>'
+    +   '<div class="legend-box">'
+    +     '<span class="legend-tag">Главное</span>'
+    +     'Цель поставили наверху, но выполнить её можно только всем уровням вместе. '
+    +     'Уровень задачи видно по её масштабу: <strong>вся компания, функция, участок или своё рабочее место</strong>.'
+    +   '</div>'
+    + '</div>'
+    + '<button class="btn btn--secondary btn--full mt-sm" onclick="restart()">Пройти заново</button>'
+    + '</div>';
+}
+
+/* ─── Управление ────────────────────────────────────────── */
+
+function render() {
+  var h = '';
+  if (state.screen === 'intro') h = renderIntro();
+  else if (state.screen === 'q') h = renderQuestion();
+  else h = renderResult();
+  document.getElementById('app').innerHTML = h;
+  notifyHeight();
+}
+
+function start() {
+  state.screen = 'q';
+  state.i = 0;
+  state.answers = [];
+  render();
+}
+
+/* Выбор обновляет блоки на месте: экран не перерисовывается и не вздрагивает */
+function pick(lv) {
+  if (answered(state.i)) return;
+  state.answers[state.i] = lv;
+
+  var c = CASES[state.i];
+  var tiers = document.querySelectorAll('#ladder [data-lv]');
+  for (var k = 0; k < tiers.length; k++) {
+    var n = Number(tiers[k].getAttribute('data-lv'));
+    var cls = 'tier';
+    if (n === c.a) cls += ' tier--right';
+    else if (n === lv) cls += ' tier--wrong';
+    tiers[k].className = cls;
+    tiers[k].onclick = null;
+    if (n === c.a) {
+      tiers[k].querySelector('.tier__slots').innerHTML = chipsHtml(n, state.i, state.i);
+    }
+  }
+
+  document.getElementById('fbbox').innerHTML = feedbackHtml();
+  document.getElementById('next-btn').disabled = false;
+  notifyHeight();
+}
+
+function next() {
+  if (state.i === CASES.length - 1) state.screen = 'result';
+  else state.i++;
+  render();
+}
+
+function restart() {
+  state.screen = 'intro';
+  state.i = 0;
+  state.answers = [];
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
