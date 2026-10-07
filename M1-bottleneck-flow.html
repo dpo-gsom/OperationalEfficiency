@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Где тормозит поток</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* ─── Экран: фиксированная высота, чтобы iframe не прыгал ─── */
+  .screen { min-height: 835px; }
+  .screen__body { flex: 1; display: flex; flex-direction: column; }
+  .screen__body--center { justify-content: center; }
+
+  /* ─── Предложение ─── */
+  .prop { padding: 13px 16px; }
+  .prop__who { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--red); }
+  .prop__text { font-size: 14px; color: var(--dark); line-height: 1.5; margin-top: 4px; }
+
+  /* ─── Поток ─── */
+  .flow-label { font-size: 12px; font-weight: 600; color: var(--slate); letter-spacing: .03em; text-transform: uppercase; }
+  .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; position: relative; }
+  .st {
+    position: relative;
+    padding: 9px 10px 8px;
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    min-width: 0;
+  }
+  .st + .st::before {
+    content: '';
+    position: absolute;
+    left: -13px;
+    top: 50%;
+    width: 11px;
+    height: 2px;
+    background: var(--border);
+  }
+  .st + .st::after {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: calc(50% - 4px);
+    border: 5px solid transparent;
+    border-left-color: var(--border);
+    border-right: 0;
+  }
+  .st__name { font-size: 13px; font-weight: 700; color: var(--dark); line-height: 1.25; min-height: 33px; }
+  .st__nums { font-size: 11.5px; color: var(--slate); line-height: 1.45; margin-top: 3px; }
+  .st__nums b { color: var(--dark); font-weight: 600; }
+  .st__nums span { display: block; }
+  .bar { height: 6px; background: var(--sand); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .bar__fill { height: 100%; background: var(--slate); border-radius: 3px; transition: width .4s; }
+  .st__q { font-size: 11.5px; margin-top: 5px; color: var(--slate); line-height: 1.3; }
+
+  .chg { background: #FFE9A8; border-radius: 3px; padding: 0 2px; }
+
+  .st--btn { cursor: pointer; transition: box-shadow .15s, transform .15s; }
+  .st--btn:hover { box-shadow: 0 3px 10px rgba(0, 59, 72, .12); transform: translateY(-1px); }
+  .st--picked { outline: 2.5px solid var(--dark); outline-offset: 1px; }
+
+  /* ─── Итог банка ─── */
+  .res { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .res__tile { padding: 8px 12px; background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius-md); display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .res__lbl { font-size: 12px; color: var(--slate); line-height: 1.3; }
+  .res__val { font-family: var(--font-display); font-size: 19px; font-weight: 900; color: var(--dark); white-space: nowrap; }
+  .res__val s { color: var(--slate); font-weight: 700; font-size: 15px; text-decoration: none; opacity: .6; }
+  .res__val--up { color: var(--green); }
+  .res__val--down { color: var(--red); }
+
+  /* ─── Решение ─── */
+  .dec { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .dec .card { padding: 11px 12px; text-align: center; font-size: 14px; font-weight: 600; color: var(--dark); }
+  .dec--locked .card { cursor: default; pointer-events: none; }
+
+  /* ─── Разбор ─── */
+  .fb-zone { min-height: 150px; display: flex; flex-direction: column; }
+  .fb-zone p + p { margin-top: 7px; }
+  .fb-zone .hint {
+    font-size: 13px;
+    color: var(--slate);
+    text-align: center;
+    padding: 18px 10px;
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius-md);
+  }
+  .levels { margin-top: 9px; padding-top: 8px; border-top: 1px solid rgba(0, 0, 0, .08); display: flex; flex-direction: column; gap: 4px; }
+  .lvl { display: flex; gap: 8px; align-items: baseline; font-size: 13px; line-height: 1.4; color: var(--slate); }
+  .lvl b { color: var(--dark); font-weight: 600; }
+  .dot { flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; position: relative; top: 1px; }
+  .dot--ok  { background: var(--green); }
+  .dot--mid { background: #D9A400; }
+  .dot--bad { background: var(--red); }
+  .def { margin-top: 8px; padding: 8px 10px; background: rgba(255, 255, 255, .6); border-radius: 6px; font-size: 13px; line-height: 1.45; }
+
+  /* ─── Итоговый экран ─── */
+  .sum { display: flex; flex-direction: column; gap: 6px; }
+  .sum__row { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius-md); }
+  .sum__row .dot { top: 5px; }
+  .sum__main { flex: 1; min-width: 0; }
+  .sum__step { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--slate); }
+  .sum__text { font-size: 14px; color: var(--dark); line-height: 1.4; }
+  .sum__eff { flex-shrink: 0; font-size: 13px; font-weight: 700; color: var(--dark); text-align: right; padding-top: 2px; }
+
+  @media (max-width: 560px) {
+    .flow { grid-template-columns: 1fr; gap: 5px; }
+    .st { display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'name q' 'nums bar'; column-gap: 10px; row-gap: 3px; padding: 7px 10px; align-items: center; }
+    .st + .st::before, .st + .st::after { display: none; }
+    .st__name { grid-area: name; min-height: 0; }
+    .st__nums { grid-area: nums; margin-top: 0; }
+    .st__nums span { display: inline; }
+    .st__nums span + span::before { content: ' · '; }
+    .st__q { grid-area: q; margin-top: 0; text-align: right; }
+    .st__q--empty { display: none; }
+    .bar { grid-area: bar; margin-top: 0; width: 64px; }
+    .res { gap: 6px; }
+    .res__tile { flex-direction: column; gap: 0; padding: 7px 10px; }
+    .fb-zone { min-height: 196px; }
+    .sum__row { flex-wrap: wrap; }
+    .sum__eff { flex-basis: 100%; text-align: left; padding: 0 0 0 19px; }
+    .screen { min-height: 1210px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script src="common.js"></script>
+<script>
+/* =========================================================
+   Где тормозит поток
+   Банк выдаёт кредиты малому бизнесу: заявка проходит пять отделов.
+   Три предложения руководителей отделов (поддержать или нет)
+   и одно улучшение на выбор — найти узкое место.
+   Принятые решения сохраняются и меняют процесс в следующих раундах.
+   Поток считается по модели: каждый отдел обрабатывает не больше
+   своей мощности, остальное копится в очереди.
+   ========================================================= */
+
+var DAYS = 20;      // рабочих дней в месяце
+var BASE_DAYS = 5;  // срок без очередей: продажи 1 + анализ 2 + юристы 1 + выдача 1
+
+var NAMES = ['Маркетинг', 'Продажи', 'Кредитный анализ', 'Юристы', 'Выдача денег'];
+
+/* Параметры процесса зависят от принятых решений:
+   r1 — премия продажам, r2 — система для юристов, r3 — новая реклама,
+   boost — отдел, куда взяли двух сотрудников (−1 — никуда) */
+function params(f) {
+  var p = {
+    L:  f.r3 ? 24 : 30,
+    Cs: 30,
+    k:  f.r1 ? (f.r3 ? 0.95 : 0.9) : (f.r3 ? 20 / 24 : 2 / 3),
+    Ca: 18,
+    a:  f.r3 ? (f.r1 ? 0.6 : 0.7) : (f.r1 ? 0.35 : 0.5),
+    Cl: f.r2 ? 24 : 14,
+    Cp: 20
+  };
+  if (f.boost === 0) p.L += 8;
+  if (f.boost === 1) p.Cs += 10;
+  if (f.boost === 2) p.Ca += 6;
+  if (f.boost === 3) p.Cl += 6;
+  if (f.boost === 4) p.Cp += 8;
+  return p;
+}
+
+/* Модель потока: вход, мощность, очередь в день по каждому отделу */
+function sim(p) {
+  var st = [];
+  st.push({ cap: p.L, inn: null, q: 0 });
+  var x = p.L;
+  var caps = [p.Cs, p.Ca, p.Cl, p.Cp];
+  var pass = [p.k, p.a, 1, 1];
+  var wait = 0;
+  for (var i = 0; i < 4; i++) {
+    var done = Math.min(x, caps[i]);
+    var q = Math.max(0, x - caps[i]);
+    st.push({ cap: caps[i], inn: x, q: q });
+    wait += q * DAYS / caps[i];
+    x = done * pass[i];
+  }
+  return { st: st, month: Math.round(x * DAYS), days: Math.round(BASE_DAYS + wait), p: p };
+}
+
+var ROUNDS = [
+  {
+    who: 'Руководитель продаж',
+    text: 'Предлагает платить менеджерам премию за каждую заявку, переданную в кредитный анализ. Сейчас менеджер ещё на первом звонке отсеивает компании, которым кредит заведомо не одобрят. С премией он будет передавать в анализ почти всех.',
+    right: 'no',
+    tag: 'эффект домино',
+    sum: 'Премия продажам за число заявок'
+  },
+  {
+    who: 'Руководитель юридического отдела',
+    text: 'Просит 3 млн ₽ на шаблоны и систему для подготовки договоров. Юристы смогут готовить 24 договора в день вместо 14.',
+    right: 'no',
+    tag: 'не тот отдел',
+    sum: 'Система для юристов за 3 млн ₽'
+  },
+  {
+    who: 'Руководитель маркетинга',
+    text: 'Сейчас маркетинг отчитывается числом обращений. Руководитель предлагает показывать рекламу только компаниям, которые работают больше года, а оценивать маркетинг по доле одобренных заявок. Обращений станет 24 в день вместо 30.',
+    right: 'yes',
+    tag: 'цепная реакция',
+    sum: 'Новая реклама и KPI маркетинга'
+  }
+];
+
+var DEF = '<b>Узкое место</b> — отдел, который не успевает за входящим потоком. Перед ним копится очередь, и он задаёт скорость всей цепочке. Здесь это кредитный анализ. Пока его не расширили, ускорять остальных бесполезно.';
+
+var state = { screen: 'intro', i: 0, answers: [] };
+
+/* ─── Вспомогательные ───────────────────────────────────── */
+
+function fmt(x) {
+  var r = Math.round(x * 10) / 10;
+  return String(r).replace('.', ',');
+}
+
+function pl(n, one, few, many) {
+  var r = Math.round(n * 10) / 10;
+  if (r % 1 !== 0) return few;
+  var m10 = r % 10, m100 = r % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+function kr(n) { return n + ' ' + pl(n, 'кредит', 'кредита', 'кредитов'); }
+function dn(n) { return n + ' ' + pl(n, 'день', 'дня', 'дней'); }
+function pct(x) { return Math.round(x * 100) + '%'; }
+
+/* Флаги решений до раунда n (не включая его) */
+function flagsBefore(n) {
+  var a = state.answers;
+  return {
+    r1: n > 0 && a[0] === 'yes',
+    r2: n > 1 && a[1] === 'yes',
+    r3: n > 2 && a[2] === 'yes',
+    boost: -1
+  };
+}
+
+/* Флаги, если в раунде n принять предложение (или взять людей в отдел v) */
+function flagsWith(n, v) {
+  var f = flagsBefore(n);
+  if (n === 0) f.r1 = v === 'yes';
+  if (n === 1) f.r2 = v === 'yes';
+  if (n === 2) f.r3 = v === 'yes';
+  if (n === 3) f.boost = v;
+  return f;
+}
+
+function answered() { return state.answers[state.i] !== undefined; }
+
+function preP() { return params(flagsBefore(state.i)); }
+function curP() { return answered() ? params(flagsWith(state.i, state.answers[state.i])) : preP(); }
+function finalP() { return params(flagsWith(3, state.answers[3])); }
+
+function flowHtml(p, mode, ref) {
+  var s = sim(p), b = sim(ref || p);
+  var h = '<div class="flow" id="flow">';
+  for (var i = 0; i < 5; i++) {
+    var st = s.st[i], bs = b.st[i];
+    var cls = 'st';
+    if (mode === 'pick') cls += ' st--btn';
+    if (mode === 'picked' && state.answers[3] === i) cls += ' st--picked';
+    h += '<div class="' + cls + '" data-st="' + i + '"' + (mode === 'pick' ? ' onclick="pickBoost(' + i + ')"' : '') + '>';
+    h += '<div class="st__name">' + NAMES[i] + '</div>';
+    if (i === 0) {
+      var capTxt = '<b>' + fmt(st.cap) + '</b>';
+      if (st.cap !== bs.cap) capTxt = '<span class="chg">' + capTxt + '</span>';
+      h += '<div class="st__nums">приводит ' + capTxt + ' обращений в день</div>'
+        + '<div class="st__q st__q--empty">&nbsp;</div>';
+    } else {
+      var load = st.inn / st.cap;
+      var c1 = '<b>' + fmt(st.cap) + '</b>', c2 = '<b>' + fmt(st.inn) + '</b>';
+      if (Math.abs(st.cap - bs.cap) > 0.01) c1 = '<span class="chg">' + c1 + '</span>';
+      if (Math.abs(st.inn - bs.inn) > 0.01) c2 = '<span class="chg">' + c2 + '</span>';
+      h += '<div class="st__nums"><span>мощность ' + c1 + '</span><span>приходит ' + c2 + '</span></div>'
+        + '<div class="bar"><div class="bar__fill" style="width:' + Math.min(100, Math.round(load * 100)) + '%"></div></div>'
+        + '<div class="st__q">' + (st.q > 0.01 ? 'очередь +' + fmt(st.q) + ' в день' : 'загрузка ' + Math.round(load * 100) + '%') + '</div>';
+    }
+    h += '</div>';
+  }
+  return h + '</div>';
+}
+
+function resHtml(p, ref) {
+  var s = sim(p), b = sim(ref || p);
+  function tile(lbl, v, bv, unit, upGood) {
+    var cls = 'res__val';
+    var txt = v + unit;
+    if (v !== bv) {
+      cls += ((v > bv) === upGood) ? ' res__val--up' : ' res__val--down';
+      txt = '<s>' + bv + ' →</s> ' + txt;
+    }
+    return '<div class="res__tile"><span class="res__lbl">' + lbl + '</span><span class="' + cls + '">' + txt + '</span></div>';
+  }
+  return '<div class="res" id="res">'
+    + tile('Кредитов за месяц', s.month, b.month, '', true)
+    + tile('Срок от заявки до денег', s.days, b.days, ' дн.', false)
+    + '</div>';
+}
+
+function progressHtml() {
+  return '<div class="progress">'
+    + '<div class="progress__meta">'
+    +   '<span class="progress__label">Раунд</span>'
+    +   '<span class="progress__fraction"><em>' + (state.i + 1) + '</em> / 4</span>'
+    + '</div>'
+    + '<div class="progress__track"><div class="progress__fill" style="width:' + (state.i / 4 * 100) + '%"></div></div>'
+    + '</div>';
+}
+
+function decHtml() {
+  var r = ROUNDS[state.i], ans = state.answers[state.i];
+  var opts = [['yes', 'Поддержать'], ['no', 'Не поддерживать']];
+  var h = '<div class="dec' + (ans !== undefined ? ' dec--locked' : '') + '" id="dec">';
+  for (var k = 0; k < 2; k++) {
+    var cls = 'card';
+    if (ans === undefined) cls += ' card--interactive';
+    else if (opts[k][0] === r.right) cls += ' card--correct';
+    else if (opts[k][0] === ans) cls += ' card--wrong';
+    else cls += ' card--dimmed';
+    h += '<div class="' + cls + '"' + (ans === undefined ? ' onclick="decide(\'' + opts[k][0] + '\')"' : '') + '>' + opts[k][1] + '</div>';
+  }
+  return h + '</div>';
+}
+
+function linesHtml(lines) {
+  var h = '<div class="levels">';
+  for (var k = 0; k < lines.length; k++) {
+    h += '<div class="lvl"><span class="dot dot--' + lines[k][0] + '"></span><span><b>' + lines[k][1] + ':</b> ' + lines[k][2] + '</span></div>';
+  }
+  return h + '</div>';
+}
+
+/* ─── Разборы: тексты считаются от текущего состояния процесса ─── */
+
+function daysChange(d0, d1) {
+  if (d1 < d0) return 'срок сократился с ' + d0 + ' до ' + dn(d1);
+  if (d1 > d0) return 'срок вырос с ' + d0 + ' до ' + dn(d1);
+  return 'срок прежний — ' + dn(d1);
+}
+
+/* s0 — процесс до раунда, s1 — если принять предложение */
+function roundBody(n, yes, s0, s1) {
+  var m0 = s0.month, m1 = s1.month, d0 = s0.days, d1 = s1.days;
+  if (n === 0) {
+    var apps0 = fmt(s0.st[2].inn), apps1 = fmt(s1.st[2].inn);
+    if (yes) {
+      return '<p>KPI продаж вырос: заявок в анализ стало ' + apps1 + ' в день вместо ' + apps0 + '. Но среди них много компаний, которые раньше отсеялись бы на первом звонке. Аналитики успевают разобрать только 18 заявок в день, остальные ждут в очереди, а одобряют теперь только ' + pct(s1.p.a) + '. Банк выдаёт за месяц ' + kr(m1) + ' вместо ' + m0 + ', а клиент ждёт денег ' + dn(d1) + ' вместо ' + d0 + '.</p>'
+        + linesHtml([['bad', 'Кредитный анализ', 'очередь растёт на ' + fmt(s1.st[2].q) + ' заявок в день'],
+                     ['mid', 'Юристы и выдача', 'работы стало меньше, люди простаивают'],
+                     ['bad', 'Банк', 'минус ' + kr(m0 - m1) + ' в месяц, срок вдвое дольше']]);
+    }
+    return '<p>Показатели банка не изменились. А если бы премию ввели, заявок в анализ стало бы ' + apps1 + ' в день вместо ' + apps0 + ' — KPI продаж вырос бы. Но среди них было бы много компаний, которые сейчас отсеиваются на первом звонке. Аналитики не успевали бы их разбирать, одобряли бы только ' + pct(s1.p.a) + ', и банк выдавал бы ' + kr(m1) + ' в месяц вместо ' + m0 + ', а клиент ждал бы денег ' + dn(d1) + ' вместо ' + d0 + '.</p>';
+  }
+  if (n === 1) {
+    var inL = s0.st[3].inn;
+    var inLtxt = fmt(inL) + ' ' + pl(inL, 'договор', 'договора', 'договоров');
+    var qA = s0.st[2].q;
+    if (yes) {
+      return '<p>Юристы теперь могут готовить 24 договора в день, но к ним приходит только ' + inLtxt + ': больше одобренных заявок кредитный анализ не выпускает. Банк выдаёт те же ' + kr(m0) + ', клиент ждёт те же ' + dn(d0) + ', а 3 млн ₽ потрачены зря.</p>'
+        + '<div class="def">' + DEF + '</div>'
+        + linesHtml([['mid', 'Юристы', 'загрузка упала с ' + pct(inL / 14) + ' до ' + pct(inL / 24) + ': новая мощность простаивает'],
+                     ['bad', 'Кредитный анализ', 'очередь как была: +' + fmt(qA) + ' ' + pl(qA, 'заявка', 'заявки', 'заявок') + ' в день']]);
+    }
+    return '<p>Показатели банка не изменились — и это правильно. К юристам приходит ' + inLtxt + ' в день при мощности 14, они и так справляются. Система подняла бы мощность до 24, но банк выдавал бы те же ' + kr(m0) + ': больше одобренных заявок кредитный анализ не выпускает. 3 млн ₽ остались в бюджете.</p>'
+      + '<div class="def">' + DEF + '</div>';
+  }
+  /* n === 2 */
+  var a0 = pct(s0.p.a), a1 = pct(s1.p.a);
+  if (yes) {
+    var loadL = s1.st[3].inn / s1.st[3].cap;
+    return '<p>По старому KPI маркетинг выглядит хуже: обращений 24 вместо 30. Зато одобряют теперь ' + a1 + ' заявок вместо ' + a0 + ': компания, которая работает больше года, — более надёжный заёмщик. Банк выдаёт ' + kr(m1) + ' в месяц вместо ' + m0 + ', ' + daysChange(d0, d1) + '.</p>'
+      + linesHtml([s0.p.k > 0.8
+                     ? ['ok', 'Продажи', 'обращения стали качественнее, хотя премия по-прежнему подталкивает передавать в анализ всех']
+                     : ['ok', 'Продажи', 'меньше пустых звонков: из 24 обращений ' + fmt(s1.st[2].inn) + ' становятся заявками'],
+                   ['ok', 'Кредитный анализ', s1.st[2].q < s0.st[2].q - 0.01 ? 'очередь сократилась, одобренных заявок больше' : 'работы столько же, а одобренных заявок больше'],
+                   loadL >= 0.85 ? ['mid', 'Юристы', 'загрузка ' + pct(loadL) + ' — следующее узкое место может появиться здесь'] : ['ok', 'Юристы', 'работы прибавилось, загрузка ' + pct(loadL)]]);
+  }
+  return '<p>Показатели банка не изменились, а могли вырасти. Обращений стало бы 24 вместо 30, и по старому KPI маркетинг выглядел бы хуже. Но одобряли бы ' + a1 + ' заявок вместо ' + a0 + ': компания, которая работает больше года, — более надёжный заёмщик. Банк выдавал бы ' + kr(m1) + ' в месяц вместо ' + m0 + '.</p>';
+}
+
+function boostBody(v, s0, s1) {
+  var m0 = s0.month, m1 = s1.month, d0 = s0.days, d1 = s1.days;
+  if (v === 0) {
+    return 'Обращений стало ' + fmt(s1.p.L) + ', но продажи успевают обработать только 30 — теперь очередь и у них. Кредитов столько же — ' + m0 + ', а ' + daysChange(d0, d1) + '. Больше обращений не помогают, если поток упирается в отдел дальше по цепочке.';
+  }
+  if (v === 1) {
+    return 'Продажи и так справлялись: к ним приходит ' + fmt(s0.p.L) + ' ' + pl(s0.p.L, 'обращение', 'обращения', 'обращений') + ' в день при мощности 30, очереди нет. Новые менеджеры будут недогружены, а очередь в кредитном анализе осталась. Банк выдаёт те же ' + kr(m0) + '.';
+  }
+  if (v === 2) {
+    var inA = s1.st[2].inn;
+    var t = 'Мощность анализа выросла до 24 заявок в день';
+    t += s1.st[2].q > 0.01
+      ? ', а приходит ' + fmt(inA) + '. Очередь стала меньше, но осталась: слабые заявки от продаж по-прежнему занимают аналитиков.'
+      : ' при ' + fmt(inA) + ' входящих — очередь исчезла.';
+    t += ' Банк выдаёт ' + kr(m1) + ' вместо ' + m0 + ', ' + daysChange(d0, d1) + '.';
+    var lw = s1.st[3];
+    t += lw.inn / lw.cap >= 0.95
+      ? ' Теперь на пределе юристы — следующее узкое место будет у них.'
+      : ' Улучшение в узком месте сразу сдвинуло результат всей цепочки.';
+    return t;
+  }
+  if (v === 3) {
+    var inL = s0.st[3].inn;
+    return 'К юристам приходит ' + fmt(inL) + ' ' + pl(inL, 'договор', 'договора', 'договоров') + ' в день при мощности ' + s0.p.Cl + ' — они и так справлялись. Новые люди будут недогружены, а банк выдаёт те же ' + kr(m0) + '.';
+  }
+  var inP = s0.st[4].inn;
+  return 'Выдача загружена на ' + pct(inP / 20) + ': ' + fmt(inP) + ' ' + pl(inP, 'выдача', 'выдачи', 'выдач') + ' в день при мощности 20. Новые сотрудники ничего не изменят: банк выдаёт те же ' + kr(m0) + ', а очередь в кредитном анализе осталась.';
+}
+
+function feedbackHtml() {
+  if (!answered()) {
+    return '<div class="hint">' + (state.i < 3
+      ? 'Решите — и поток пересчитается.'
+      : 'Нажмите на отдел — и поток пересчитается.') + '</div>';
+  }
+  var ok, head, body;
+  var s0 = sim(preP());
+  if (state.i < 3) {
+    var r = ROUNDS[state.i], ans = state.answers[state.i];
+    ok = ans === r.right;
+    head = (ok ? 'Верно · ' : 'Неверно · ') + r.tag;
+    body = roundBody(state.i, ans === 'yes', s0, sim(params(flagsWith(state.i, 'yes'))));
+  } else {
+    var b = state.answers[3];
+    ok = b === 2;
+    head = ok ? 'Верно · это узкое место' : 'Неверно · узкое место в кредитном анализе';
+    body = '<p>' + boostBody(b, s0, sim(curP())) + '</p>';
+  }
+  return '<div class="feedback ' + (ok ? 'feedback--success' : 'feedback--error') + '">'
+    + '<div class="feedback__head">' + head + '</div>' + body + '</div>';
+}
+
+/* ─── Экраны ────────────────────────────────────────────── */
+
+function renderIntro() {
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body screen__body--center">'
+    +   '<h1 class="page-title">Где тормозит<span>поток заявок</span></h1>'
+    +   '<div class="divider"></div>'
+    +   '<p class="lead-text">Банк выдаёт кредиты малому бизнесу. Заявка проходит через пять отделов. Результат каждого отдела — сырьё для следующего, то есть для его внутреннего клиента. Всё начинается с обращений — запросов на кредит, которые компании оставляют после рекламы.</p>'
+    +   '<div class="mt-sm">' + flowHtml(params(flagsBefore(0)), 'view') + '</div>'
+    +   '<p class="lead-text mt-sm"><strong>Мощность</strong> — сколько отдел успевает обработать за день, <strong>приходит</strong> — сколько к нему поступает. Если приходит больше, чем отдел успевает, копится очередь. По пути часть потока отсеивается: из трёх обращений продажи оформляют в заявку два, а кредитный анализ одобряет половину заявок. Сейчас банк выдаёт 180 кредитов в месяц, клиент ждёт денег 7 дней.</p>'
+    +   '<div class="mt-xs">' + resHtml(params(flagsBefore(0))) + '</div>'
+    +   '<p class="lead-text mt-sm">В трёх раундах руководители отделов предлагают изменения — решите, поддержать ли их. В четвёртом вы сами выберете, куда вложиться.</p>'
+    + '</div>'
+    + '<button class="btn btn--primary btn--full mt-md" onclick="start()">Начать →</button>'
+    + '</div>';
+}
+
+function renderRound() {
+  var last = state.i === 3;
+  var who, text;
+  if (!last) { who = ROUNDS[state.i].who; text = ROUNDS[state.i].text; }
+  else {
+    who = 'Решение за вами';
+    text = 'Процесс сейчас такой, каким его сделали ваши решения. Банк выделил деньги на двух новых сотрудников. Они добавят мощности: маркетингу +8 обращений в день, продажам +10, кредитному анализу +6, юристам +6, выдаче +8. В какой отдел их взять?';
+  }
+  var mode = last ? (answered() ? 'picked' : 'pick') : 'view';
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body">'
+    +   progressHtml()
+    +   '<div class="card prop mt-xs"><div class="prop__who">' + who + '</div><div class="prop__text">' + text + '</div></div>'
+    +   '<div class="flow-label mt-sm" id="flowlbl">' + flowLabel() + '</div>'
+    +   '<div class="mt-xs" id="flowbox">' + flowHtml(curP(), mode, preP()) + '</div>'
+    +   '<div class="mt-xs" id="resbox">' + resHtml(curP(), preP()) + '</div>'
+    +   (last ? '' : '<div class="mt-sm">' + decHtml() + '</div>')
+    +   '<div id="fbbox" class="fb-zone mt-sm">' + feedbackHtml() + '</div>'
+    + '</div>'
+    + '<div class="nav-bar">'
+    +   '<button id="next-btn" class="btn btn--primary btn--full" onclick="next()"' + (answered() ? '' : ' disabled') + '>'
+    +     (last ? 'К итогам →' : 'Дальше →')
+    +   '</button>'
+    + '</div>'
+    + '</div>';
+}
+
+function flowLabel() {
+  if (!answered()) return state.i === 3 ? 'Сейчас · нажмите на отдел' : 'Сейчас';
+  if (state.i === 3) return 'С двумя новыми сотрудниками';
+  return state.answers[state.i] === 'yes' ? 'После вашего решения' : 'После вашего решения · без изменений';
+}
+
+function renderResult() {
+  var rows = '';
+  for (var k = 0; k < 3; k++) {
+    var r = ROUNDS[k], yes = state.answers[k] === 'yes';
+    var ok = state.answers[k] === r.right;
+    var before = sim(params(flagsBefore(k))).month;
+    var d = sim(params(flagsWith(k, 'yes'))).month - before;
+    var eff;
+    if (yes) eff = d === 0 ? 'кредитов столько же, −3 млн ₽' : (d > 0 ? '+' : '−') + kr(Math.abs(d)) + ' в месяц';
+    else if (d > 0) eff = 'упущено: +' + kr(d) + ' в месяц';
+    else if (d < 0) eff = 'без потерь, а могло быть −' + kr(-d) + ' в месяц';
+    else eff = '3 млн ₽ сэкономлены';
+    rows += '<div class="sum__row"><span class="dot dot--' + (ok ? 'ok' : 'bad') + '"></span>'
+      + '<div class="sum__main"><div class="sum__step">' + r.tag + '</div>'
+      + '<div class="sum__text">' + r.sum + ': вы ' + (yes ? 'поддержали' : 'не поддержали') + '</div></div>'
+      + '<div class="sum__eff">' + eff + '</div></div>';
+  }
+  var b = state.answers[3];
+  var db = sim(finalP()).month - sim(params(flagsBefore(3))).month;
+  rows += '<div class="sum__row"><span class="dot dot--' + (b === 2 ? 'ok' : 'bad') + '"></span>'
+    + '<div class="sum__main"><div class="sum__step">узкое место</div>'
+    + '<div class="sum__text">Двух новых сотрудников вы взяли в отдел «' + NAMES[b] + '»</div></div>'
+    + '<div class="sum__eff">' + (db > 0 ? '+' + kr(db) + ' в месяц' : 'кредитов столько же') + '</div></div>';
+
+  var fin = sim(finalP());
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body screen__body--center">'
+    +   '<h2 class="section-title">Что показал поток</h2>'
+    +   '<div class="divider"></div>'
+    +   '<p class="lead-text">Начинали со 180 кредитов в месяц и срока 7 дней. После ваших решений банк выдаёт <strong>' + kr(fin.month) + '</strong>, а клиент ждёт денег <strong>' + dn(fin.days) + '</strong>.</p>'
+    +   '<div class="sum mt-sm">' + rows + '</div>'
+    +   '<div class="legend-box">'
+    +     '<span class="legend-tag">Главное</span>'
+    +     'KPI отдела и результат компании могут расходиться: премия продажам поднимает их показатель, но банк выдаёт меньше кредитов. '
+    +     'Прежде чем менять что-то в своём отделе, стоит спросить: <strong>что получит мой внутренний клиент и где сейчас узкое место?</strong> Улучшение в любом другом месте поток не ускорит.'
+    +   '</div>'
+    + '</div>'
+    + '<button class="btn btn--secondary btn--full mt-sm" onclick="restart()">Пройти заново</button>'
+    + '</div>';
+}
+
+/* ─── Управление ────────────────────────────────────────── */
+
+function render() {
+  var h = '';
+  if (state.screen === 'intro') h = renderIntro();
+  else if (state.screen === 'q') h = renderRound();
+  else h = renderResult();
+  document.getElementById('app').innerHTML = h;
+  notifyHeight();
+}
+
+function start() {
+  state.screen = 'q';
+  state.i = 0;
+  state.answers = [];
+  render();
+}
+
+/* Решение обновляет блоки на месте, без перерисовки экрана */
+function refresh() {
+  var last = state.i === 3;
+  document.getElementById('flowlbl').innerHTML = flowLabel();
+  document.getElementById('flowbox').innerHTML = flowHtml(curP(), last ? 'picked' : 'view', preP());
+  document.getElementById('resbox').innerHTML = resHtml(curP(), preP());
+  if (!last) document.getElementById('dec').outerHTML = decHtml();
+  document.getElementById('fbbox').innerHTML = feedbackHtml();
+  document.getElementById('next-btn').disabled = false;
+  notifyHeight();
+}
+
+function decide(v) {
+  if (answered()) return;
+  state.answers[state.i] = v;
+  refresh();
+}
+
+function pickBoost(i) {
+  if (answered()) return;
+  state.answers[3] = i;
+  refresh();
+}
+
+function next() {
+  if (state.i === 3) state.screen = 'result';
+  else state.i++;
+  render();
+}
+
+function restart() {
+  state.screen = 'intro';
+  state.i = 0;
+  state.answers = [];
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
