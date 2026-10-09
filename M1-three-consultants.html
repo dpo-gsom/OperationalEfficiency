@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Три консультанта</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* ─── Экран: фиксированная высота, чтобы iframe не прыгал ─── */
+  .screen { min-height: 640px; }
+  .screen__body { flex: 1; display: flex; flex-direction: column; }
+  .screen__body--center { justify-content: center; }
+
+  /* ─── Кейс ─── */
+  .case-card { padding: 0 2px; }
+  .case-title { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--dark); line-height: 1.25; margin-bottom: 6px; }
+  .case-text { font-size: 14px; line-height: 1.6; color: var(--slate); }
+  .sym { border-radius: 3px; transition: background .3s; }
+  .case-card--done .sym { background: #FFE9A8; }
+
+  /* ─── Консультанты ─── */
+  .cons { display: flex; flex-direction: column; gap: 8px; }
+  .con { padding: 10px 14px; }
+  .con__text { font-size: 14px; line-height: 1.45; color: var(--dark); }
+  .con--locked { cursor: default; pointer-events: none; }
+
+  /* ─── Шпаргалка на вводном и итоговом экранах ─── */
+  .key { display: flex; flex-direction: column; gap: 6px; }
+  .key__row { display: flex; gap: 12px; align-items: baseline; padding: 8px 12px; background: var(--white); border: 1.5px solid var(--border); border-left: 4px solid var(--dark); border-radius: var(--radius-md); }
+  .key__row:nth-child(2) { border-left-color: var(--amber); }
+  .key__row:nth-child(3) { border-left-color: var(--red); }
+  .key__name { flex: 0 0 200px; font-size: 14px; font-weight: 700; color: var(--dark); line-height: 1.3; }
+  .key__what { font-size: 13px; color: var(--slate); line-height: 1.4; }
+
+  /* ─── Зона разбора ─── */
+  .fb-zone { min-height: 150px; display: flex; flex-direction: column; }
+  .fb-zone .hint {
+    font-size: 13px;
+    color: var(--slate);
+    text-align: center;
+    padding: 18px 10px;
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius-md);
+  }
+
+  /* ─── Итоги ─── */
+  .res { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; }
+  .res__row { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.4; color: var(--slate); }
+  .res__row b { color: var(--dark); font-weight: 600; }
+  .res__mark {
+    flex-shrink: 0;
+    width: 18px; height: 18px; margin-top: 1px;
+    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: var(--white);
+    background: var(--green);
+  }
+  .res__row--miss .res__mark { background: var(--red); }
+  .summary { font-size: 14px; line-height: 1.65; color: var(--slate); }
+
+  @media (max-width: 560px) {
+    .screen { min-height: 840px; }
+    .key__row { flex-direction: column; gap: 2px; }
+    .key__name { flex: none; }
+    .res { grid-template-columns: 1fr; }
+    .fb-zone { min-height: 200px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script src="common.js"></script>
+<script>
+/* =========================================================
+   Три консультанта
+   Шесть процессов с проблемой. Три консультанта предлагают свой подход:
+   один — в духе бережливого производства, другой — теории ограничений,
+   третий — шести сигм. Подход не подписан, порядок советов перемешивается:
+   нужно вникнуть в суть совета и выбрать тот, что здесь сработает.
+   Ключ — вывод страницы: Lean борется с потерями,
+   теория ограничений — с узким местом, шесть сигм — с разбросом и дефектами.
+   ========================================================= */
+
+var METHODS = {
+  lean: { name: 'Бережливое производство (Lean)', what: 'Потери: лишние шаги, перемещения, ожидание. Убирает их по всему процессу.' },
+  toc:  { name: 'Теория ограничений', what: 'Одно слабое звено, перед которым копится работа. Усиливает его и подстраивает под него остальных.' },
+  six:  { name: 'Шесть сигм', what: 'Разброс и дефекты: результат каждый раз разный. Находит причину и делает процесс стабильным.' }
+};
+var ORDER = ['lean', 'toc', 'six'];
+
+var CASES = [
+  {
+    title: 'Лаборатория клиники',
+    text: 'Пациент сдаёт анализ за 10 минут, а результат получает только через три дня. Регистратура и процедурный кабинет справляются без очередей. <span class="sym">Анализатор в лаборатории один и работает в одну смену — пробирки ждут его по двое суток.</span>',
+    right: 'toc',
+    advice: {
+      lean: 'Пройти весь путь пациента от записи до результата и убрать лишние шаги: повторные анкеты, ожидание у кабинета, ручную передачу пробирок.',
+      toc:  'Перевести анализатор на работу в две смены, а забор крови и доставку пробирок подстроить под его график.',
+      six:  'Собрать статистику ошибок в анализах и выяснить, почему результаты иногда приходится переделывать.'
+    },
+    fb: {
+      toc:  'Срок задаёт одно звено — анализатор. Перед ним копятся пробирки, а остальные службы успевают. Если увеличить время его работы и подстроить под него остальных, срок сократится для всех пациентов.',
+      lean: 'Убрать лишние шаги полезно, но результат от этого быстрее не придёт: пробирки всё равно ждут анализатор по двое суток. Пока не усилили слабое звено, другие улучшения срок не сократят.',
+      six:  'Об ошибках и переделках в условии ничего нет: анализы делают правильно, но медленно. Проблема в одном звене, перед которым копится работа.'
+    }
+  },
+  {
+    title: 'Склад интернет-магазина',
+    text: 'Заказ собирают в среднем 40 минут, хотя сложить товары в коробку можно за пять. <span class="sym">Сборщик проходит за смену 9 км между стеллажами, при приёмке товар дважды перекладывают с места на место, а каждый возврат ждёт подписи трёх человек.</span>',
+    right: 'lean',
+    advice: {
+      lean: 'Разобрать путь заказа по шагам и убрать всё, что не нужно клиенту: лишние переходы, перекладывание, лишние подписи. Ходовые товары поставить ближе к упаковке.',
+      toc:  'Найти самый загруженный участок склада и в первую очередь добавить туда людей.',
+      six:  'Измерить, насколько время сборки отличается от заказа к заказу, и найти причины разброса.'
+    },
+    fb: {
+      lean: 'Время уходит не на работу, а на лишнее: ходьбу, перекладывание, ожидание подписей. Клиенту всё это не нужно — это потери. Бережливое производство как раз ищет их по всему процессу и убирает.',
+      toc:  'Здесь нет одного участка, перед которым копится работа: время теряется понемногу на каждом шаге. Новые люди будут так же ходить и перекладывать. Потери нужно убирать по всему процессу.',
+      six:  'Проблема не в том, что время сборки «скачет», а в том, что оно каждый раз уходит на лишние действия. Измерять разброс здесь бесполезно — нужно убирать потери.'
+    }
+  },
+  {
+    title: 'Кондитерская фабрика',
+    text: 'Торт по рецептуре должен весить 1 кг. Линия работает быстро, без простоев и лишних операций. <span class="sym">Но вес гуляет от 960 до 1080 г: лёгкие торты уходят в брак, а тяжёлые фабрика продаёт себе в убыток.</span> В брак попадает 7% продукции.',
+    right: 'six',
+    advice: {
+      lean: 'Проверить, нет ли на линии лишних операций и простоев, и сократить их.',
+      toc:  'Найти самую медленную операцию на линии и ускорить её, чтобы выпускать больше тортов.',
+      six:  'Измерить вес на каждом этапе, найти, откуда берётся разброс — дозатор, тесто, режим печи, — и сделать процесс стабильным.'
+    },
+    fb: {
+      six:  'Проблема в разбросе: каждый торт получается разным. Шесть сигм нужны как раз для этого — найти причину нестабильности и сделать результат предсказуемым. Тогда уйдут и брак, и перерасход.',
+      lean: 'В условии сказано, что лишних операций и простоев нет. Если убрать то немногое, что осталось, вес гулять не перестанет. Проблема в разбросе.',
+      toc:  'Линия и так работает быстро. Если её ускорить, бракованных тортов станет больше, а не меньше. Проблема в разбросе веса.'
+    }
+  },
+  {
+    title: 'Служба доставки',
+    text: 'Средний срок доставки — три дня, как и обещано на сайте. Склад и курьеры справляются с объёмом. <span class="sym">Но на деле одни посылки приходят на следующий день, а другие — через шесть.</span> Клиенты жалуются, что не могут спланировать, когда быть дома.',
+    right: 'six',
+    advice: {
+      lean: 'Убрать лишние шаги на пути посылки, чтобы средний срок стал два дня вместо трёх.',
+      toc:  'Найти участок, где посылки задерживаются, и в первую очередь расширить его.',
+      six:  'Разобраться, почему сроки так сильно отличаются от посылки к посылке, и добиться, чтобы почти все приходили за три дня.'
+    },
+    fb: {
+      six:  'Средний срок в порядке — проблема в разбросе. Клиенту важнее знать, что посылка точно придёт через три дня, чем получить её вовремя «в среднем». Сделать процесс предсказуемым — задача шести сигм.',
+      lean: 'Даже если средний срок станет два дня, разброс останется: одни посылки будут приходить за день, другие — за пять. Клиенты жалуются не на скорость, а на непредсказуемость.',
+      toc:  'В условии сказано, что склад и курьеры справляются, одного слабого звена нет. Проблема в том, что сроки гуляют.'
+    }
+  },
+  {
+    title: 'Юридический отдел',
+    text: 'Типовой договор с поставщиком согласуют 12 рабочих дней. <span class="sym">Сама работа над ним занимает около трёх часов, остальное время он лежит в почте: его по очереди визируют семь человек, и каждый держит документ день-два.</span> Половина согласующих ни разу не вносила правок.',
+    right: 'lean',
+    advice: {
+      lean: 'Убрать из цепочки тех, кто не вносит правок, а остальным согласовывать договор одновременно, а не по очереди.',
+      toc:  'Найти согласующего, который держит договор дольше всех, и дать ему помощника.',
+      six:  'Ввести чек-лист проверки договора, чтобы в тексте было меньше ошибок.'
+    },
+    fb: {
+      lean: 'Из 12 дней работа занимает три часа — остальное ожидание и лишние визы. Это потери в чистом виде. Lean убирает шаги, которые ничего не добавляют, и не даёт документу стоять в очереди.',
+      toc:  'Здесь нет одного медленного согласующего: каждый держит договор день-два. Если ускорить одного, договор всё равно пройдёт ещё шесть очередей. Лишние шаги нужно убирать по всей цепочке.',
+      six:  'Об ошибках в договорах в условии ничего не сказано. Время уходит на ожидание и визы, которые ничего не меняют. Это потери.'
+    }
+  },
+  {
+    title: 'Кухня ресторана',
+    text: 'Вечером гости ждут горячее по 40 минут. Повара готовят быстро: блюдо готово через 10–15 минут после заказа. <span class="sym">Но на раздаче один сотрудник: он раскладывает гарниры и соусы, сверяет заказ и передаёт его официанту — и не успевает. Блюда остывают на полке.</span>',
+    right: 'toc',
+    advice: {
+      lean: 'Пройти весь путь заказа от официанта до гостя и убрать лишние движения на каждом этапе.',
+      toc:  'Поставить в часы пик на раздачу второго человека, а поваров попросить отдавать блюда в том темпе, в каком раздача успевает их забирать.',
+      six:  'Ввести стандарт подачи, чтобы каждое блюдо выглядело одинаково.'
+    },
+    fb: {
+      toc:  'Кухня работает быстро, но всё упирается в раздачу: там копятся блюда. Усилить это звено и подстроить под него остальных — ровно то, что предлагает теория ограничений. Ускорять поваров бесполезно: блюда будут остывать ещё дольше.',
+      lean: 'Лишние движения есть везде, но гость ждёт из-за одного звена — раздачи. Пока она не успевает, улучшения на других этапах ожидание не сократят.',
+      six:  'Блюда готовят правильно, гости жалуются не на вид и не на вкус, а на ожидание. Проблема в одном слабом звене.'
+    }
+  }
+];
+
+var state = { screen: 'intro', i: 0, answers: [], orders: [] };
+
+function shuffled(arr) {
+  var a = arr.slice();
+  for (var k = a.length - 1; k > 0; k--) {
+    var j = Math.floor(Math.random() * (k + 1));
+    var t = a[k]; a[k] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+/* ─── Вспомогательные ───────────────────────────────────── */
+
+function answered() {
+  var a = state.answers[state.i];
+  return a !== undefined && a !== null;
+}
+
+function lc(s) { return s.charAt(0).toLowerCase() + s.slice(1); }
+
+function keyHtml() {
+  var h = '<div class="key">';
+  for (var k = 0; k < ORDER.length; k++) {
+    var m = METHODS[ORDER[k]];
+    h += '<div class="key__row"><div class="key__name">' + m.name + '</div><div class="key__what">' + m.what + '</div></div>';
+  }
+  return h + '</div>';
+}
+
+function progressHtml() {
+  return '<div class="progress">'
+    + '<div class="progress__meta">'
+    +   '<span class="progress__label">Ситуация</span>'
+    +   '<span class="progress__fraction"><em>' + (state.i + 1) + '</em> / ' + CASES.length + '</span>'
+    + '</div>'
+    + '<div class="progress__track"><div class="progress__fill" style="width:' + (state.i / CASES.length * 100) + '%"></div></div>'
+    + '</div>';
+}
+
+function conClass(m, ans, right) {
+  if (ans === undefined || ans === null) return 'card card--interactive con';
+  var cls = 'card con con--locked';
+  if (m === right) cls += ' card--correct';
+  else if (m === ans) cls += ' card--wrong';
+  else cls += ' card--dimmed';
+  return cls;
+}
+
+function consHtml() {
+  var c = CASES[state.i], ans = state.answers[state.i];
+  var order = state.orders[state.i];
+  var h = '<div class="cons" id="cons">';
+  for (var k = 0; k < order.length; k++) {
+    var m = order[k];
+    h += '<div class="' + conClass(m, ans, c.right) + '" data-m="' + m + '"' + (answered() ? '' : ' onclick="pick(\'' + m + '\')"') + '>'
+      + '<div class="con__text">' + c.advice[m] + '</div>'
+      + '</div>';
+  }
+  return h + '</div>';
+}
+
+function feedbackHtml() {
+  if (!answered()) return '<div class="hint">Выберите совет — здесь появится разбор.</div>';
+  var c = CASES[state.i], ans = state.answers[state.i];
+  var ok = ans === c.right;
+  return '<div class="feedback ' + (ok ? 'feedback--success' : 'feedback--error') + '">'
+    + '<div class="feedback__head">' + (ok ? 'Верно · ' + lc(METHODS[c.right].name) : 'Неверно · здесь сработает ' + lc(METHODS[c.right].name)) + '</div>'
+    + c.fb[ans]
+    + '</div>';
+}
+
+/* ─── Экраны ────────────────────────────────────────────── */
+
+function renderIntro() {
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body screen__body--center">'
+    +   '<h1 class="page-title">Три<span>консультанта</span></h1>'
+    +   '<div class="divider"></div>'
+    +   '<p class="lead-text">В шести компаниях процесс работает хуже, чем нужно. В каждую пришли три консультанта, и каждый предлагает свой подход. Выберите, чей совет здесь действительно сработает.</p>'
+    +   '<p class="lead-text mt-sm">Подсказка — с чем работает каждый подход:</p>'
+    +   '<div class="mt-xs">' + keyHtml() + '</div>'
+    + '</div>'
+    + '<button class="btn btn--primary btn--full mt-md" onclick="start()">Начать →</button>'
+    + '</div>';
+}
+
+function renderQuestion() {
+  var c = CASES[state.i];
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body">'
+    +   progressHtml()
+    +   '<div class="case-card mt-sm' + (answered() ? ' case-card--done' : '') + '" id="case">'
+    +     '<div class="case-title">' + c.title + '</div>'
+    +     '<p class="case-text">' + c.text + '</p>'
+    +   '</div>'
+    +   '<div class="mt-sm">' + consHtml() + '</div>'
+    +   '<div id="fbbox" class="fb-zone mt-sm">' + feedbackHtml() + '</div>'
+    + '</div>'
+    + '<div class="nav-bar">'
+    +   '<button id="next-btn" class="btn btn--primary btn--full" onclick="next()"' + (answered() ? '' : ' disabled') + '>'
+    +     (state.i === CASES.length - 1 ? 'К итогам →' : 'Далее →')
+    +   '</button>'
+    + '</div>'
+    + '</div>';
+}
+
+function renderResult() {
+  var rows = '', miss = 0;
+  for (var k = 0; k < CASES.length; k++) {
+    var c = CASES[k], a = state.answers[k], ok = a === c.right;
+    if (!ok) miss++;
+    rows += '<div class="res__row' + (ok ? '' : ' res__row--miss') + '"><span class="res__mark">' + (ok ? '✓' : '✕') + '</span>'
+      + '<span><b>' + c.title + '</b> — ' + lc(METHODS[c.right].name)
+      + (ok ? '' : '<br>вы выбрали: ' + lc(METHODS[a].name)) + '</span></div>';
+  }
+  var summary = miss === 0
+    ? 'Вы уверенно различаете, какую проблему решает каждый подход.'
+    : (miss <= 2
+      ? 'Основное вы различаете. Посмотрите ещё раз ситуации, отмеченные красным: какой симптом в них главный.'
+      : 'Подходы пока путаются. Перед выбором стоит спросить себя: процесс теряет время на лишнее, упирается в одно звено или каждый раз даёт разный результат?');
+  return '<div class="page-wrap--compact screen anim-fade-up">'
+    + '<div class="screen__body screen__body--center">'
+    +   '<h2 class="section-title">Чей совет сработал</h2>'
+    +   '<div class="divider"></div>'
+    +   '<div class="res">' + rows + '</div>'
+    +   '<p class="summary mt-sm">' + summary + '</p>'
+    +   '<div class="legend-box">'
+    +     '<span class="legend-tag">Главное</span>'
+    +     'Все три подхода улучшают процессы, но ищут разное. <strong>Lean — потери, теория ограничений — слабое звено, шесть сигм — разброс и дефекты.</strong> '
+    +     'Прежде чем выбирать подход, определите, что именно мешает процессу.'
+    +   '</div>'
+    + '</div>'
+    + '<button class="btn btn--secondary btn--full" onclick="restart()">Пройти заново</button>'
+    + '</div>';
+}
+
+/* ─── Управление ────────────────────────────────────────── */
+
+function render() {
+  var h;
+  if (state.screen === 'intro') h = renderIntro();
+  else if (state.screen === 'q') h = renderQuestion();
+  else h = renderResult();
+  document.getElementById('app').innerHTML = h;
+  notifyHeight();
+}
+
+function start() {
+  state.screen = 'q';
+  state.i = 0;
+  state.answers = [];
+  state.orders = [];
+  for (var n = 0; n < CASES.length; n++) state.orders.push(shuffled(ORDER));
+  render();
+}
+
+/* Выбор обновляет блоки на месте: экран не перерисовывается и не вздрагивает */
+function pick(m) {
+  if (answered()) return;
+  state.answers[state.i] = m;
+  var c = CASES[state.i];
+  var cards = document.querySelectorAll('#cons [data-m]');
+  for (var k = 0; k < cards.length; k++) {
+    cards[k].className = conClass(cards[k].getAttribute('data-m'), m, c.right);
+    cards[k].onclick = null;
+  }
+  document.getElementById('case').className += ' case-card--done';
+  document.getElementById('fbbox').innerHTML = feedbackHtml();
+  document.getElementById('next-btn').disabled = false;
+  notifyHeight();
+}
+
+function next() {
+  if (state.i === CASES.length - 1) state.screen = 'result';
+  else state.i++;
+  render();
+}
+
+function restart() {
+  state.screen = 'intro';
+  state.i = 0;
+  state.answers = [];
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
